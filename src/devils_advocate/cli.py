@@ -251,6 +251,8 @@ def _conversation(
             style="meta",
         )
     )
+    if not client.health():
+        ui.error(f"No model reachable at {cfg.endpoint}. Start Ollama, or set DA_BASE_URL.")
     ui.meta("State your position. /help for commands.")
     devil = Devil(client, retriever, top_k=cfg.top_k, max_claims=cfg.max_claims)
     turns: list[Rebuttal] = []

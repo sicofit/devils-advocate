@@ -110,6 +110,9 @@ class FakeModel:
         self.calls.append((name, messages))
         return self.respond(messages, name)
 
+    def health(self) -> bool:
+        return True
+
     def names(self) -> list[str]:
         return [name for name, _ in self.calls]
 

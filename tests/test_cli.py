@@ -111,6 +111,44 @@ def test_argue_renders_for_humans(
     assert "besonders schweren Verfehlungen" in out
 
 
+def type_lines(monkeypatch: pytest.MonkeyPatch, *lines: str) -> None:
+    """Feed the conversation these lines, then end it like Ctrl+D would."""
+    queue = list(lines)
+
+    def fake_input(prompt: str = "") -> str:
+        if not queue:
+            raise EOFError
+        return queue.pop(0)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+
+def test_devil_without_arguments_opens_the_conversation(
+    data_dir: Path,
+    fake_model: FakeModel,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    export = data_dir / "talk.md"
+    type_lines(monkeypatch, "/help", "Kündigung immer zulässig.", f"/export {export}", "/quit")
+    assert cli.main(["--data-dir", str(data_dir)]) == 0
+    out = capsys.readouterr().out
+    assert "State your position" in out and "No model reachable" not in out
+    assert "/sources" in out  # the help text
+    assert "BGE 150 III 100 E. 2.2 S. 101" in out
+    assert "besonders schweren Verfehlungen" in export.read_text(encoding="utf-8")
+    assert fake_model.names() == ["analysis", "counterarguments"]
+
+
+def test_conversation_warns_when_the_model_is_down(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("DA_BASE_URL", raising=False)
+    type_lines(monkeypatch)  # Ctrl+D right away
+    assert cli.main(["--data-dir", str(data_dir)]) == 0
+    assert "No model reachable at http://127.0.0.1:11434" in capsys.readouterr().out
+
+
 def test_dense_retriever_needs_vectors(data_dir: Path, fake_model: FakeModel) -> None:
     with pytest.raises(SystemExit, match="No vectors"):
         cli.main(["--data-dir", str(data_dir), "argue", "--retriever", "dense", "x"])
