@@ -291,6 +291,37 @@ def test_bench_writes_retrieval_report(data_dir: Path, fake_model: FakeModel) ->
     assert report["index"]["revision"] == "test"
 
 
+@pytest.mark.parametrize("published", [None, "match", "fd363e6c59d4"])
+def test_fetch_checks_the_published_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, published: str | None
+) -> None:
+    import hashlib
+
+    from devils_advocate import corpus
+
+    body = b"parquet bytes"
+    digest = hashlib.sha256(body).hexdigest()
+
+    def download(target: Path, **_: object) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(body)
+
+    monkeypatch.setattr(corpus, "dataset_revision", lambda revision: "6336cd66331427f6")
+    monkeypatch.setattr(corpus, "download", download)
+    monkeypatch.setattr(
+        corpus, "expected_sha256", lambda revision: digest if published == "match" else published
+    )
+    args = ["--data-dir", str(tmp_path / "data"), "fetch"]
+    if published == "fd363e6c59d4":
+        with pytest.raises(SystemExit, match="damaged"):
+            cli.main(args)
+        assert not (tmp_path / "data" / "bge.parquet").exists()
+        return
+    assert cli.main(args) == 0
+    source = json.loads((tmp_path / "data" / "corpus.json").read_text(encoding="utf-8"))
+    assert source["sha256"] == digest
+
+
 def test_corpus_hash_matches_hashlib(tmp_path: Path) -> None:
     import hashlib
 

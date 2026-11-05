@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -40,29 +41,53 @@ def dataset_revision(revision: str = "main") -> str:
         return json.loads(resp.read().decode("utf-8"))["sha"]
 
 
+def expected_sha256(revision: str) -> str | None:
+    """The Git LFS object id of the BGE file at `revision`, which is its SHA-256."""
+    folder = FILE.rsplit("/", 1)[0]
+    url = f"https://huggingface.co/api/datasets/{DATASET}/tree/{revision}/{folder}"
+    with urllib.request.urlopen(url, timeout=30) as resp:
+        entries = json.loads(resp.read().decode("utf-8"))
+    for entry in entries:
+        if entry.get("path") == FILE:
+            return (entry.get("lfs") or {}).get("oid")
+    return None
+
+
 def download(
     target: Path,
     *,
-    revision: str = "main",
+    revision: str,
     on_progress: Callable[[int, int | None], None] | None = None,
 ) -> Path:
-    """Download the BGE Parquet file to `target`, resuming a previous partial download."""
+    """Download the BGE Parquet file at commit `revision` to `target`.
+
+    A partial download is resumed only for the same revision, so an interrupted
+    download is never completed with the bytes of a newer file.
+    """
     url = f"https://huggingface.co/datasets/{DATASET}/resolve/{revision}/{FILE}"
     target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_name(target.name + ".part")
+    partial = target.with_name(f"{target.name}.{revision[:12]}.part")
+    for stale in target.parent.glob(f"{target.name}*.part"):
+        if stale != partial:
+            stale.unlink()
     done = partial.stat().st_size if partial.exists() else 0
     request = urllib.request.Request(url, headers={"Range": f"bytes={done}-"} if done else {})
-    with urllib.request.urlopen(request, timeout=60) as resp:
-        if done and resp.status != 206:  # server ignored the range: start over
-            done = 0
-        length = resp.headers.get("Content-Length")
-        total = done + int(length) if length else None
-        with partial.open("ab" if done else "wb") as out:
-            while chunk := resp.read(1 << 20):
-                out.write(chunk)
-                done += len(chunk)
-                if on_progress:
-                    on_progress(done, total)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as resp:
+            if done and resp.status != 206:  # server ignored the range: start over
+                done = 0
+            length = resp.headers.get("Content-Length")
+            total = done + int(length) if length else None
+            with partial.open("ab" if done else "wb") as out:
+                while chunk := resp.read(1 << 20):
+                    out.write(chunk)
+                    done += len(chunk)
+                    if on_progress:
+                        on_progress(done, total)
+    except urllib.error.HTTPError as exc:
+        # 416: the range starts at the end of the file, so the last run had got all of it.
+        if exc.code != 416 or not done:
+            raise
     shutil.move(partial, target)
     return target
 

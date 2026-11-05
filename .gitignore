@@ -25,12 +25,11 @@ venv/
 # Downloaded corpus and built indexes (fetched with `devil fetch`, never committed)
 /data/
 *.parquet
-*.parquet.part
+*.part
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
 *.npy
-*.npy.part
 
 # Exported memos and transcripts
 /exports/

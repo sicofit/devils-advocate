@@ -154,11 +154,24 @@ def cmd_fetch(cfg: config.Config, args: argparse.Namespace) -> int:
             )
 
         corpus.download(cfg.corpus_path, revision=revision, on_progress=progress)
+        status.update("checking the download")
+        digest = corpus.sha256(cfg.corpus_path)
+        try:
+            expected = corpus.expected_sha256(revision)
+        except (OSError, ValueError) as exc:  # offline now, or an unexpected reply
+            expected = None
+            ui.meta(f"Could not look up the published hash ({exc}); not checked.")
+    if expected and digest != expected:
+        cfg.corpus_path.unlink()
+        raise SystemExit(
+            f"The download is damaged: SHA-256 {digest[:12]}, published {expected[:12]}. "
+            "Run `devil fetch` again."
+        )
     source = {
         "dataset": corpus.DATASET,
         "revision": revision,
         "file": corpus.FILE,
-        "sha256": corpus.sha256(cfg.corpus_path),
+        "sha256": digest,
     }
     (cfg.data_dir / "corpus.json").write_text(json.dumps(source), encoding="utf-8")
     ui.console.print(Text(f"saved {cfg.corpus_path}", style="ok"))
