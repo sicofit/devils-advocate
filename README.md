@@ -12,42 +12,55 @@ Swiss Federal Supreme Court, and it shows a quote only if that quote is
 verbatim in the Erwägung it cites. If no quote holds up, it says so instead of
 making one up.
 
-A real run, shortened at `[...]` (the position: *the landlord may terminate
-the lease immediately after the first late rent payment*):
+A real run (the position: *the landlord may terminate the lease immediately
+after the first late rent payment*):
 
 ```text
 $ devil argue "Le bailleur peut résilier le bail immédiatement dès le premier retard de paiement du loyer."
-┌─ 1. Le bailleur dispose d'un droit à la résiliation immédiate du bail dès le premier retard─┐
-│ L'arrêt BGE 127 III 548 établit que le droit à la résiliation immédiate n'existe pas dès le │
-│ premier retard. L'article 257d al. 1 CO impose au bailleur de fixer par écrit un délai de   │
-│ paiement d'au moins trente jours avant de pouvoir résilier le bail pour défaut de paiement. │
-│   „L'art. 257d al. 1 CO prévoit ainsi que, lorsque, après la réception de la chose, le      │
-│ locataire a du retard pour s'acquitter d'un terme ou de frais accessoires échus, le         │
-│ bailleur, s'agissant de baux d'habitations ou de locaux commerciaux, peut lui fixer par     │
-│ écrit un délai de paiement d'au moins trente jours, avec l'avis comminatoire qu'à défaut de │
-│ paiement dans ce délai il résiliera le bail.“                                               │
-│   — BGE 127 III 548 E. 3 S. 550  ✓ verbatim                                                 │
-│                                                                                             │
-│ Conformément à l'arrêt BGE 140 III 591, la loi exige que le bailleur accorde un délai de    │
-│ paiement minimum de trente jours avant d'exercer son droit de résiliation. Cela contredit   │
-│ directement l'affirmation selon laquelle le bailleur pourrait résilier immédiatement dès le │
-│ premier retard.                                                                             │
-│   „A teneur de l'art. 257d al. 1 CO, lorsque le locataire, après réception de la chose, a   │
-│ du retard pour s'acquitter d'un terme ou de frais accessoires échus, le bailleur peut lui   │
-│ fixer par écrit un délai de paiement et lui signifier qu'à défaut de paiement dans ce       │
-│ délai, il résiliera le bail. Le délai doit être d'au moins trente jours pour les baux       │
-│ d'habitations ou de locaux commerciaux.“                                                    │
-│   — BGE 140 III 591 E. 1 S. 593  ✓ verbatim                                                 │
-│                                                                                             │
-│ L'arrêt BGE 136 III 196 confirme que même pour les baux à ferme, la résiliation n'est       │
-│ possible qu'après l'expiration d'un délai de grâce écrit (60 jours). [...]                  │
-│   — BGE 136 III 196 E. 1.1 S. 197  ✓ verbatim                                               │
-└─────────────────────────────────────────────────────────────────────────────────────────────┘
-3 verified quote(s) · 9s · /sources for full passages
+┌────────────────────────────────────────────────────────────────────────────────────────────┐
+│ 1. Le bailleur dispose d'un droit à la résiliation immédiate du bail dès le premier retard │
+│ de paiement du loyer.                                                                      │
+│                                                                                            │
+│ Cet arrêt établit que la résiliation immédiate n'est pas possible dès le premier retard.   │
+│ La loi exige impérativement un délai de grâce d'au moins trente jours accordé au locataire │
+│ pour payer l'arriéré avant que le bailleur ne puisse invoquer la résiliation.              │
+│   „L'art. 257d al. 1 CO prévoit ainsi que, lorsque, après la réception de la chose, le     │
+│ locataire a du retard pour s'acquitter d'un terme ou de frais accessoires échus, le        │
+│ bailleur, s'agissant de baux d'habitations ou de locaux commerciaux, peut lui fixer par    │
+│ écrit un délai de paiement d'au moins trente jours, avec l'avis comminatoire qu'à défaut   │
+│ de paiement dans ce délai il résiliera le bail.“                                           │
+│   — BGE 127 III 548 E. 3 S. 550 f.  ✓ verbatim                                             │
+│                                                                                            │
+│ Ces passages démontrent que la résiliation ne peut pas être immédiate. La loi impose un    │
+│ délai de préavis spécifique (trois mois) et des formalités précises (notification avec     │
+│ motif dix jours avant), ce qui contredit directement l'idée d'une résiliation effective    │
+│ dès le premier retard.                                                                     │
+│   „L'avis de majoration du loyer, avec indication des motifs, doit parvenir au locataire   │
+│ dix jours au moins avant le début du délai de résiliation et être effectué au moyen d'une  │
+│ formule agréée par le canton.                                                              │
+│ Le préavis de résiliation est de trois mois pour les habitations (art. 266c in initio      │
+│ CO).“                                                                                      │
+│   — BGE 131 III 566 E. 3.3 S. 570 f.  ✓ verbatim                                           │
+│                                                                                            │
+│ Ce passage précise que pour obtenir l'expulsion suite à un défaut de paiement, il faut     │
+│ d'abord que le bail ait été résilié valablement. Cela implique que la simple constatation  │
+│ d'un retard ne suffit pas pour une résiliation immédiate ; celle-ci doit suivre les        │
+│ conditions légales (comme le délai de grâce) pour être valide.                             │
+│   „L'action en expulsion pour défaut de paiement du loyer au sens de l'art. 257d CO, comme │
+│ celle pour défaut de paiement du fermage au sens de l'art. 282 CO, selon la procédure de   │
+│ protection dans les cas clairs (art. 257 CPC), présuppose que le bail ait valablement pris │
+│ fin, puisque l'extinction du bail est une condition du droit à la restitution des locaux“  │
+│   — BGE 144 III 462 E. 3.3.1 S. 466  ≈ wording taken from the source                       │
+└────────────────────────────────────────────────────────────────────────────────────────────┘
+3 verified quote(s) · 9s
 ```
 
 The arguments are the model's. The quotes and citations are cut from the
-decisions after a string match, so `✓ verbatim` is a check, not a claim.
+decisions after a string match, so `✓ verbatim` is a check, not a claim; `≈`
+marks a quote the model copied with small changes, shown in the court's
+wording. The check does not judge the argument: the second quote is real, but
+it is about rent increases and the ordinary notice period, not about late
+payment.
 
 ## Why
 
@@ -82,6 +95,11 @@ Reply to the devil's objections to continue the argument. In the conversation:
 | `/discarded` | also show the quotes that failed verification, and why |
 | `/export [file]` | save the conversation as a Markdown memo |
 | `/new` | start over |
+| `/help`, `/quit` | list the commands; leave (or Ctrl+C at the prompt) |
+
+A follow-up turn sees the claims and citations of the earlier ones and is
+answered from passages not cited yet. Ctrl+C while the devil is working
+cancels that turn, not the conversation.
 
 One question without a conversation, for scripts:
 
@@ -89,18 +107,29 @@ One question without a conversation, for scripts:
 devil argue --json "Eine fristlose Kündigung ist bei jeder Verfehlung zulässig."
 ```
 
+With `--json`, stdout carries the JSON and nothing else; messages and errors
+go to stderr.
+
 ### Configuration
 
 Flags override `DA_*` environment variables, which override the defaults.
+`--model`, `--embed-model`, `--base-url` and `--data-dir` go before the
+command: `devil --model qwen3:8b argue …`.
 
 | variable | default | |
 | --- | --- | --- |
-| `DA_BASE_URL` | `http://127.0.0.1:11434` | any OpenAI-compatible endpoint |
+| `DA_BASE_URL` | `http://127.0.0.1:11434` | any OpenAI-compatible endpoint, with or without `/v1` |
 | `DA_MODEL` | `qwen3.5:9b` | chat model |
+| `DA_EMBED_MODEL` | `nomic-embed-text` | embedding model for `devil embed` and dense retrieval |
 | `DA_API_KEY` | – | sent as a bearer token if set |
-| `DA_DATA_DIR` | `~/.devils-advocate` | corpus and index |
+| `DA_DATA_DIR` | `~/.devils-advocate` | corpus, index and vectors |
 | `DA_SINCE` | `2000` | earliest decision year for `devil index` |
-| `DA_REASONING_EFFORT` | `none` | passed through; `none` turns off the thinking phase on Ollama |
+| `DA_TOP_K` | `8` | passages shown to the model per claim |
+| `DA_MAX_CLAIMS` | `4` | claims attacked per position |
+| `DA_TEMPERATURE` | `0.2` | sampling temperature of the chat model |
+| `DA_REQUEST_TIMEOUT` | `600` | seconds to wait for a chat reply |
+| `DA_EMBED_TIMEOUT` | `60` | seconds to wait for an embedding batch before retrying it |
+| `DA_REASONING_EFFORT` | `none` | passed through; `none` turns off the thinking phase on Ollama, `omit` sends nothing |
 
 Nothing leaves your machine unless `DA_BASE_URL` points elsewhere. `devil status`
 shows what is configured and installed.
@@ -122,19 +151,24 @@ position
 ```
 
 - **Passages, not pages.** Each decision is split at its Erwägung numbers
-  (`E. 2.1`, `E. 3b/aa`) into 125,807 passages. Page markers are removed from
-  the text but recorded, so a quote is cited as `BGE 146 III 441 E. 2.5.3 S. 451`.
-  Long Erwägungen are split at sentence breaks. ([`segment.py`](src/devils_advocate/segment.py))
-- **Verification** normalises quotes, dashes and whitespace and keeps an index
-  back into the original, so the quote shown is always the court's text. An
-  ellipsis splits a quote into fragments that must appear in order. A fragment
-  that matches 92 % or more of one window is accepted as close and marked `≈`
-  instead of `✓`. Quotes under five words are rejected.
+  (`E. 2.1`, `E. 3b/aa`) into 126,497 passages. Page markers are removed from
+  the text but recorded, so a quote is cited with the page it is on,
+  `BGE 146 III 441 E. 2.5.3 S. 451`, or `S. 451 f.` when it runs onto the next.
+  Long Erwägungen are split at sentence breaks; the Dispositiv is left out.
+  ([`segment.py`](src/devils_advocate/segment.py))
+- **Verification** normalises quotation marks, dashes and whitespace and keeps
+  an index back into the original, so the quote shown is always the court's
+  text. Matches respect word boundaries. An ellipsis splits a quote into
+  fragments that must appear in order, and the text it skips must not contain
+  a negation. A fragment that differs only in inflection or punctuation (92 %
+  of the characters line up, no word added, dropped or replaced) is accepted
+  as close and marked `≈` instead of `✓`. Quotes under five words are rejected.
   ([`verify.py`](src/devils_advocate/verify.py))
 - **The Regeste** (headnote) is searchable but cited as `(Regeste)`, because it
   summarises the reasoning rather than being part of it.
-- **Dense and hybrid retrieval** are implemented (`devil embed`,
-  `--retriever hybrid`) but not the default; see [the decision record](docs/DECISIONS.md#2-bm25-is-the-default-retriever-dense-retrieval-is-optional).
+- **Dense and hybrid retrieval** are implemented (`devil embed`, then
+  `devil argue --retriever hybrid`) but not measured; once vectors exist that
+  fit the current index, `auto` uses hybrid. See [the decision record](docs/DECISIONS.md#2-bm25-is-the-default-retriever-dense-retrieval-is-optional).
 
 The reasoning behind each of these choices, and what would change it, is in
 [`docs/DECISIONS.md`](docs/DECISIONS.md).
@@ -156,22 +190,22 @@ passage of the cited Erwägung among the first ten passages?
 
 | recall@10 | all | same language | cross language |
 | --- | --- | --- | --- |
-| BM25, decision | 0.438 | 0.605 | 0.119 |
-| BM25 + translations, decision | **0.462** | 0.541 | **0.311** |
-| BM25, Erwägung | 0.365 | 0.533 | 0.042 |
-| BM25 + translations, Erwägung | **0.380** | 0.472 | **0.204** |
-| queries (decision / Erwägung) | 1,000 / 902 | 656 / 593 | 344 / 309 |
+| BM25, decision | 0.421 | 0.576 | 0.108 |
+| BM25 + translations, decision | **0.435** | 0.512 | **0.280** |
+| BM25, Erwägung | 0.356 | 0.505 | 0.056 |
+| BM25 + translations, Erwägung | **0.369** | 0.446 | **0.213** |
+| queries (decision / Erwägung) | 1,000 / 909 | 668 / 608 | 332 / 301 |
 
 A third of the citations cross languages: a German decision citing a French
 one, or the reverse. Lexical search does not match *Kündigung* to *résiliation*,
-so BM25 finds the cited decision for 61 % of same-language queries but for only
-12 % of cross-language ones. Searching with a German and a French translation
+so BM25 finds the cited decision for 58 % of same-language queries but for only
+11 % of cross-language ones. Searching with a German and a French translation
 of each query as well (written by `qwen3.5:9b`) raises cross-language recall to
-31 %, but costs 6 points on same-language queries, because the translated
+28 %, but costs 6 points on same-language queries, because the translated
 rankings carry the same weight in the fusion as the original. On balance it
 helps, which is why the devil writes its search queries in both languages.
 
-BM25 takes 126 ms per query, 285 ms with the two translations. Recall@1/5/20,
+BM25 takes 109 ms per query, 245 ms with the two translations. Recall@1/5/20,
 MRR and every query with its ranks are in
 [`retrieval.json`](evals/results/retrieval.json). Dense retrieval is
 implemented but not measured, for the reason given in
@@ -186,14 +220,14 @@ specific decision comes back with a verified quote.
 
 | `qwen3.5:9b`, BM25 | |
 | --- | --- |
-| expected decision quoted with a verified quote | **18 / 22** |
-| expected decision retrieved | 20 / 22 |
-| positions with at least one verified counter-quote | 22 / 22 |
+| expected decision quoted with a verified quote | **17 / 22** |
+| expected decision retrieved | 19 / 22 |
+| positions with at least one verified counter-quote | 21 / 22 |
 | out-of-scope inputs where the devil abstained | 4 / 4 |
-| proposed quotes that verified | 83 / 86 (73 exact, 10 close) |
-| seconds per position | median 8.9, max 30.8 |
+| proposed quotes that verified | 77 / 82 (64 exact, 13 close) |
+| seconds per position | median 8.1, max 22.4 |
 
-Other decisions may contradict a position just as well, so 18 / 22 is a lower
+Other decisions may contradict a position just as well, so 17 / 22 is a lower
 bound. In the other direction, the positions were written from the Regeste of
 the expected decision, so their wording is close to the court's. Read the
 table as a regression test of the whole pipeline, not as recall on questions
@@ -224,10 +258,11 @@ devil eval                # end to end, updates the badge above
 The decisions come from [OpenCaseLaw](https://huggingface.co/datasets/voilaj/swiss-caselaw)
 (`voilaj/swiss-caselaw`, file `bge.parquet`), released under CC0. Thanks to its
 maintainers for making Swiss case law available in bulk. The data is not part
-of this repository; `devil fetch` downloads it and records the commit and the
-file's SHA-256. The results in this README were produced from revision
-`6336cd6` (SHA-256 `fd363e6c…4931179`, 6,819 decisions, 125,807 passages); to
-index exactly that version:
+of this repository; `devil fetch` downloads it, checks it against the SHA-256
+that Hugging Face publishes for the file, and records the commit and the hash.
+The results in this README were produced from revision `6336cd6` (SHA-256
+`fd363e6c…4931179`, 6,817 decisions, 126,497 passages); to index exactly that
+version:
 
 ```sh
 devil fetch --revision 6336cd66331427f65f7f18379a7f7a0d0105963b

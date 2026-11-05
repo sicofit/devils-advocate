@@ -3,18 +3,20 @@
     "cases": 26,
     "contradicting_positions": 22,
     "out_of_scope": 4,
-    "found_expected": 18,
-    "retrieved_expected": 20,
-    "answered": 22,
+    "found_expected": 17,
+    "retrieved_expected": 19,
+    "answered": 21,
     "abstained_out_of_scope": 4,
-    "quotes_proposed": 86,
-    "quotes_verified": 83,
-    "quotes_exact": 73,
+    "quotes_proposed": 82,
+    "quotes_verified": 77,
+    "quotes_exact": 64,
     "discarded_by_reason": {
-      "not found in the cited passage": 3
+      "not found in the cited passage": 1,
+      "changes a word of the cited passage": 2,
+      "the ellipsis leaves out a negation": 2
     },
-    "seconds_median": 8.9,
-    "seconds_max": 30.8
+    "seconds_median": 8.1,
+    "seconds_max": 22.4
   },
   "cases": [
     {
@@ -26,21 +28,22 @@
       "language": "de",
       "claims": 2,
       "proposed": 6,
-      "verified": 6,
-      "exact": 6,
-      "discarded": {},
+      "verified": 4,
+      "exact": 4,
+      "discarded": {
+        "not found in the cited passage": 1,
+        "changes a word of the cited passage": 1
+      },
       "cited": [
         "BGE 151 III 402",
         "BGE 134 III 71",
         "BGE 140 III 36",
-        "BGE 150 III 209",
-        "BGE 151 III 402",
-        "BGE 144 III 193"
+        "BGE 140 III 372"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 27.8
+      "seconds": 21.8
     },
     {
       "id": "ostern-fristenstillstand",
@@ -52,20 +55,20 @@
       "claims": 2,
       "proposed": 6,
       "verified": 6,
-      "exact": 4,
+      "exact": 6,
       "discarded": {},
       "cited": [
         "BGE 139 V 490",
         "BGE 139 V 490",
-        "BGE 138 III 792",
+        "BGE 131 V 305",
         "BGE 139 V 490",
         "BGE 139 V 490",
-        "BGE 133 V 96"
+        "BGE 131 V 305"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 20.5
+      "seconds": 19.1
     },
     {
       "id": "loeschung-260-schkg",
@@ -82,12 +85,12 @@
       "cited": [
         "BGE 146 III 441",
         "BGE 146 III 441",
-        "BGE 149 III 362"
+        "BGE 150 III 268"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 7.0
+      "seconds": 7.8
     },
     {
       "id": "schulbusse-emrk",
@@ -98,21 +101,22 @@
       "language": "de",
       "claims": 2,
       "proposed": 6,
-      "verified": 6,
+      "verified": 5,
       "exact": 5,
-      "discarded": {},
+      "discarded": {
+        "the ellipsis leaves out a negation": 1
+      },
       "cited": [
         "BGE 150 I 88",
+        "BGE 135 I 313",
+        "BGE 140 I 2",
         "BGE 150 I 88",
-        "BGE 128 I 346",
-        "BGE 150 I 88",
-        "BGE 150 I 88",
-        "BGE 152 III 168"
+        "BGE 141 III 265"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 17.1
+      "seconds": 15.3
     },
     {
       "id": "doping-training",
@@ -120,25 +124,23 @@
       "expect": [
         "BGE 145 IV 329"
       ],
-      "language": "en",
-      "claims": 3,
-      "proposed": 7,
-      "verified": 7,
-      "exact": 7,
+      "language": "de",
+      "claims": 2,
+      "proposed": 5,
+      "verified": 5,
+      "exact": 4,
       "discarded": {},
       "cited": [
         "BGE 145 IV 329",
         "BGE 145 IV 329",
+        "BGE 144 IV 240",
         "BGE 145 IV 329",
-        "BGE 145 IV 329",
-        "BGE 145 IV 329",
-        "BGE 145 IV 329",
-        "BGE 147 III 49"
+        "BGE 145 IV 329"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 22.6
+      "seconds": 15.6
     },
     {
       "id": "quellenschutz-beschlagnahme",
@@ -153,17 +155,17 @@
       "exact": 4,
       "discarded": {},
       "cited": [
-        "BGE 140 IV 108",
         "BGE 151 IV 153",
         "BGE 140 IV 108",
+        "BGE 138 IV 225",
         "BGE 140 IV 108",
         "BGE 151 IV 153",
-        "BGE 151 IV 153"
+        "BGE 140 IV 108"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 17.5
+      "seconds": 16.7
     },
     {
       "id": "amtliche-verteidigung-tarif",
@@ -173,18 +175,19 @@
       ],
       "language": "de",
       "claims": 1,
-      "proposed": 2,
-      "verified": 2,
-      "exact": 2,
+      "proposed": 3,
+      "verified": 3,
+      "exact": 3,
       "discarded": {},
       "cited": [
         "BGE 145 IV 90",
+        "BGE 139 IV 261",
         "BGE 139 IV 261"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 7.4
+      "seconds": 8.2
     },
     {
       "id": "einbuergerung-verein",
@@ -194,18 +197,19 @@
       ],
       "language": "de",
       "claims": 1,
-      "proposed": 2,
-      "verified": 2,
-      "exact": 2,
+      "proposed": 3,
+      "verified": 3,
+      "exact": 3,
       "discarded": {},
       "cited": [
         "BGE 135 I 265",
+        "BGE 138 I 305",
         "BGE 138 I 305"
       ],
       "retrieved_expected": true,
       "found_expected": false,
       "abstained": false,
-      "seconds": 9.0
+      "seconds": 9.7
     },
     {
       "id": "fraude-electorale",
@@ -215,10 +219,12 @@
       ],
       "language": "fr",
       "claims": 1,
-      "proposed": 2,
+      "proposed": 3,
       "verified": 2,
-      "exact": 2,
-      "discarded": {},
+      "exact": 1,
+      "discarded": {
+        "the ellipsis leaves out a negation": 1
+      },
       "cited": [
         "BGE 138 IV 70",
         "BGE 138 IV 70"
@@ -226,7 +232,7 @@
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 11.3
+      "seconds": 10.9
     },
     {
       "id": "familiers-voisins",
@@ -236,18 +242,17 @@
       ],
       "language": "fr",
       "claims": 1,
-      "proposed": 2,
-      "verified": 2,
-      "exact": 2,
+      "proposed": 1,
+      "verified": 1,
+      "exact": 1,
       "discarded": {},
       "cited": [
-        "BGE 140 IV 97",
         "BGE 140 IV 97"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 9.4
+      "seconds": 5.3
     },
     {
       "id": "urteilsvorschlag-gerichtsferien",
@@ -264,15 +269,15 @@
       "cited": [
         "BGE 152 III 347",
         "BGE 144 III 404",
-        "BGE 152 III 92",
+        "BGE 138 IV 186",
         "BGE 144 III 404",
         "BGE 144 III 404",
-        "BGE 138 III 792"
+        "BGE 152 III 347"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 16.4
+      "seconds": 19.8
     },
     {
       "id": "iv-gerichtskosten",
@@ -283,18 +288,19 @@
       "language": "de",
       "claims": 1,
       "proposed": 3,
-      "verified": 3,
-      "exact": 3,
-      "discarded": {},
+      "verified": 2,
+      "exact": 2,
+      "discarded": {
+        "changes a word of the cited passage": 1
+      },
       "cited": [
         "BGE 138 V 122",
-        "BGE 139 V 496",
         "BGE 137 V 210"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 8.3
+      "seconds": 8.6
     },
     {
       "id": "zeitablauf-ermessen",
@@ -306,17 +312,17 @@
       "claims": 1,
       "proposed": 3,
       "verified": 3,
-      "exact": 1,
+      "exact": 3,
       "discarded": {},
       "cited": [
         "BGE 140 IV 145",
-        "BGE 149 IV 161",
-        "BGE 143 IV 469"
+        "BGE 132 IV 1",
+        "BGE 136 IV 117"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 7.6
+      "seconds": 8.1
     },
     {
       "id": "hinweis-fristenstillstand",
@@ -331,14 +337,14 @@
       "exact": 3,
       "discarded": {},
       "cited": [
-        "BGE 139 III 78",
+        "BGE 152 III 347",
         "BGE 138 III 483",
-        "BGE 152 III 347"
+        "BGE 139 III 78"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 8.2
+      "seconds": 6.9
     },
     {
       "id": "beistandschaft-gutachten",
@@ -350,17 +356,17 @@
       "claims": 1,
       "proposed": 3,
       "verified": 3,
-      "exact": 3,
+      "exact": 2,
       "discarded": {},
       "cited": [
         "BGE 140 III 97",
-        "BGE 138 V 58",
-        "BGE 143 III 183"
+        "BGE 148 III 1",
+        "BGE 143 III 189"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 8.4
+      "seconds": 7.4
     },
     {
       "id": "curatela-perizia",
@@ -371,13 +377,12 @@
       "language": "de",
       "claims": 1,
       "proposed": 3,
-      "verified": 2,
+      "verified": 3,
       "exact": 2,
-      "discarded": {
-        "not found in the cited passage": 1
-      },
+      "discarded": {},
       "cited": [
-        "BGE 143 III 189",
+        "BGE 140 III 105",
+        "BGE 148 III 1",
         "BGE 148 III 1"
       ],
       "retrieved_expected": false,
@@ -392,26 +397,23 @@
         "BGE 140 V 220"
       ],
       "language": "de",
-      "claims": 3,
-      "proposed": 9,
-      "verified": 9,
-      "exact": 8,
+      "claims": 2,
+      "proposed": 6,
+      "verified": 6,
+      "exact": 4,
       "discarded": {},
       "cited": [
         "BGE 140 V 220",
-        "BGE 140 V 220",
         "BGE 129 V 95",
         "BGE 140 V 220",
         "BGE 140 V 220",
-        "BGE 129 V 95",
         "BGE 140 V 220",
-        "BGE 129 V 95",
-        "BGE 150 V 229"
+        "BGE 129 V 95"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 30.8
+      "seconds": 18.6
     },
     {
       "id": "verrechnung-waehrung",
@@ -423,7 +425,7 @@
       "claims": 1,
       "proposed": 3,
       "verified": 3,
-      "exact": 2,
+      "exact": 1,
       "discarded": {},
       "cited": [
         "BGE 130 III 312",
@@ -433,7 +435,7 @@
       "retrieved_expected": false,
       "found_expected": false,
       "abstained": false,
-      "seconds": 8.8
+      "seconds": 6.9
     },
     {
       "id": "up-abtretung",
@@ -443,19 +445,15 @@
       ],
       "language": "de",
       "claims": 1,
-      "proposed": 2,
-      "verified": 1,
-      "exact": 1,
-      "discarded": {
-        "not found in the cited passage": 1
-      },
-      "cited": [
-        "BGE 142 III 131"
-      ],
+      "proposed": 0,
+      "verified": 0,
+      "exact": 0,
+      "discarded": {},
+      "cited": [],
       "retrieved_expected": true,
-      "found_expected": true,
-      "abstained": false,
-      "seconds": 9.7
+      "found_expected": false,
+      "abstained": true,
+      "seconds": 2.8
     },
     {
       "id": "eviction-clear-case",
@@ -465,20 +463,17 @@
       ],
       "language": "en",
       "claims": 1,
-      "proposed": 3,
-      "verified": 2,
-      "exact": 1,
-      "discarded": {
-        "not found in the cited passage": 1
-      },
+      "proposed": 1,
+      "verified": 1,
+      "exact": 0,
+      "discarded": {},
       "cited": [
-        "BGE 144 III 462",
-        "BGE 142 III 515"
+        "BGE 138 III 123"
       ],
-      "retrieved_expected": true,
+      "retrieved_expected": false,
       "found_expected": false,
       "abstained": false,
-      "seconds": 8.3
+      "seconds": 5.3
     },
     {
       "id": "libre-passage-sequestre",
@@ -488,20 +483,22 @@
       ],
       "language": "fr",
       "claims": 2,
-      "proposed": 4,
-      "verified": 4,
+      "proposed": 6,
+      "verified": 6,
       "exact": 4,
       "discarded": {},
       "cited": [
         "BGE 148 III 232",
-        "BGE 129 V 440",
         "BGE 148 III 232",
+        "BGE 126 V 258",
+        "BGE 148 III 232",
+        "BGE 132 III 145",
         "BGE 148 III 232"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 19.6
+      "seconds": 22.4
     },
     {
       "id": "schuldneranweisung-gerichtsstand",
@@ -511,18 +508,19 @@
       ],
       "language": "de",
       "claims": 1,
-      "proposed": 2,
-      "verified": 2,
-      "exact": 2,
+      "proposed": 3,
+      "verified": 3,
+      "exact": 3,
       "discarded": {},
       "cited": [
         "BGE 145 III 255",
-        "BGE 145 III 255"
+        "BGE 145 III 255",
+        "BGE 137 III 193"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 10.9
+      "seconds": 11.8
     },
     {
       "id": "no-claim-pizza",
@@ -594,8 +592,9 @@
     "revision": "6336cd66331427f65f7f18379a7f7a0d0105963b",
     "sha256": "fd363e6c59d420922a8dcf87f3fc76ec4944dc503fca7c0db57a76d3a4931179",
     "built": "2026-11-05",
-    "decisions": "6819",
-    "passages": "125807"
+    "decisions": "6817",
+    "passages": "126497",
+    "build_id": "bb9eb4ee4fde44559314c51f4e6c6976"
   },
   "model": "qwen3.5:9b",
   "retriever": "bm25"
