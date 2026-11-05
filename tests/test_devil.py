@@ -96,7 +96,7 @@ def test_one_counter_per_passage(retriever: Retriever) -> None:
 def test_at_most_max_counters(retriever: Retriever) -> None:
     def everything(m: list[dict]) -> list[dict]:
         return [
-            {"passage": label, "quote": text[:200], "argument": "a"}
+            {"passage": label, "quote": " ".join(text.split()[:30]), "argument": "a"}
             for label, text in passages_in(m).items()
             if len(text.split()) >= 5
         ]
