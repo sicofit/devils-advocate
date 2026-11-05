@@ -36,16 +36,20 @@ class Case:
 
 def load_cases(path: Path) -> list[Case]:
     cases = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    # utf-8-sig: a file saved by Notepad or PowerShell may begin with a byte order mark.
+    for number, line in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("//"):
             continue
         try:
             raw = json.loads(line)
+            case = Case(
+                raw["id"], raw["position"], tuple(raw.get("expect", [])), raw.get("note", "")
+            )
         except json.JSONDecodeError as exc:
             raise ValueError(f"{path}:{number}: {exc}") from exc
-        cases.append(
-            Case(raw["id"], raw["position"], tuple(raw.get("expect", [])), raw.get("note", ""))
-        )
+        except (KeyError, TypeError) as exc:
+            raise ValueError(f"{path}:{number}: a case needs an id and a position") from exc
+        cases.append(case)
     return cases
 
 

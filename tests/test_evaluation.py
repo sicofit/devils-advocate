@@ -38,11 +38,21 @@ def test_load_cases(tmp_path: Path) -> None:
     assert cases[1].should_abstain
 
 
-def test_load_cases_reports_the_bad_line(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("second", "message"),
+    [("{broken", "bad.jsonl:2"), ('{"id": "no-position"}', "bad.jsonl:2: a case needs")],
+)
+def test_load_cases_reports_the_bad_line(tmp_path: Path, second: str, message: str) -> None:
     path = tmp_path / "bad.jsonl"
-    path.write_text('{"id": "ok", "position": "x"}\n{broken\n', encoding="utf-8")
-    with pytest.raises(ValueError, match="bad.jsonl:2"):
+    path.write_text('{"id": "ok", "position": "x"}\n' + second + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
         evaluation.load_cases(path)
+
+
+def test_load_cases_reads_a_byte_order_mark(tmp_path: Path) -> None:
+    path = tmp_path / "cases.jsonl"
+    path.write_text('{"id": "ok", "position": "x"}\n', encoding="utf-8-sig")
+    assert [c.id for c in evaluation.load_cases(path)] == ["ok"]
 
 
 def respond(messages: list[dict], name: str) -> dict:

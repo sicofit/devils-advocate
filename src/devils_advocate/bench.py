@@ -41,7 +41,7 @@ from .store import Store
 
 CITATION = re.compile(
     r"\b(?:BGE|ATF|DTF)\s+(\d{2,3})\s+([IVX]+[a-z]?)\s+(\d{1,4})"
-    r"(?:\s+(?:E\.|consid\.|c\.)\s*(\d{1,2}(?:\.\d{1,2})*(?:[a-z]{1,2})?(?:/[a-z]{1,3})?))?"
+    r"(?:\s+(?:E\.|Erw\.|consid\.|c\.)\s*(\d{1,2}(?:\.\d{1,2})*(?:[a-z]{1,2})?(?:/[a-z]{1,3})?))?"
     r"(?:\s+(?:S\.|p\.|pag\.)\s*\d+(?:\s*(?:f\.|ff\.|s\.|ss\.|seg\.|segg\.))?)?"
 )
 # A parenthetical that holds at least one BGE citation,
@@ -207,10 +207,11 @@ def translate(
                         name="translation",
                     )
                 except LLMError:
-                    reply = {}
-                known[query.text] = [
-                    str(reply.get(lang, "")).strip() for lang in ("de", "fr") if reply.get(lang)
-                ]
+                    reply = None  # not cached: the next run asks again
+                if reply is not None:
+                    known[query.text] = [
+                        str(reply.get(lang, "")).strip() for lang in ("de", "fr") if reply.get(lang)
+                    ]
             if on_progress:
                 on_progress(i, len(queries))
     finally:

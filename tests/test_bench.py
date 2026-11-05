@@ -60,10 +60,14 @@ def test_citation_pattern_reads_the_pinpoint() -> None:
     found = [
         m.groups()
         for m in bench.CITATION.finditer(
-            "BGE 120 II 50 E. 3b/aa; ATF 149 II 200 consid. 4.1 p. 203"
+            "BGE 120 II 50 E. 3b/aa; ATF 149 II 200 consid. 4.1 p. 203; BGE 96 I 12 Erw. 2"
         )
     ]
-    assert found == [("120", "II", "50", "3b/aa"), ("149", "II", "200", "4.1")]
+    assert found == [
+        ("120", "II", "50", "3b/aa"),
+        ("149", "II", "200", "4.1"),
+        ("96", "I", "12", "2"),
+    ]
 
 
 def test_pinpoint_parts() -> None:
@@ -137,12 +141,16 @@ def test_translations_are_cached(db: Store, tmp_path: Path) -> None:
     assert bench.translate(FakeModel(unreachable), queries, cache) == first
 
 
-def test_failed_translation_is_recorded_as_empty(db: Store, tmp_path: Path) -> None:
+def test_failed_translation_is_empty_and_asked_again(db: Store, tmp_path: Path) -> None:
     def failing(m: list[dict], name: str) -> dict:
         raise LLMError("model down")
 
     queries = bench.build_queries(db)
-    assert bench.translate(FakeModel(failing), queries, tmp_path / "t.json") == {queries[0].id: []}
+    cache = tmp_path / "t.json"
+    assert bench.translate(FakeModel(failing), queries, cache) == {queries[0].id: []}
+    assert json.loads(cache.read_text(encoding="utf-8")) == {}  # nothing cached
+    model = FakeModel(lambda m, name: {"de": TRANSLATION})
+    assert bench.translate(model, queries, cache) == {queries[0].id: [TRANSLATION]}
 
 
 def test_level_scores() -> None:
