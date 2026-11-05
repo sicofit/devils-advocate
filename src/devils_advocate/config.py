@@ -22,7 +22,7 @@ class Config:
     embed_timeout: float = 60.0
     # Passed through to the endpoint. "none" switches off the thinking phase of
     # reasoning models on Ollama, which cuts a structured call from ~15 s to ~1 s.
-    # Set DA_REASONING_EFFORT="" to send nothing.
+    # Set DA_REASONING_EFFORT=omit to send nothing, for servers that reject it.
     reasoning_effort: str | None = "none"
     # Earliest decision year that `devil index` puts into the index.
     since: int = 2000
@@ -32,7 +32,10 @@ class Config:
 
     @property
     def endpoint(self) -> str:
-        url = self.base_url.rstrip("/")
+        """The server root: "localhost:11434/v1/" becomes "http://localhost:11434"."""
+        url = self.base_url.strip().rstrip("/")
+        if "://" not in url:
+            url = "http://" + url
         return url[: -len("/v1")] if url.endswith("/v1") else url
 
     @property
@@ -49,24 +52,32 @@ def load(**overrides: object) -> Config:
     defaults = Config()
     values: dict[str, object] = {}
     for f in fields(Config):
-        raw = os.environ.get(ENV_PREFIX + f.name.upper())
-        if raw:
-            values[f.name] = _coerce(getattr(defaults, f.name), raw)
-        elif raw == "" and "None" in str(f.type):
+        variable = ENV_PREFIX + f.name.upper()
+        raw = os.environ.get(variable)
+        if raw is None:
+            continue
+        raw = raw.strip()
+        if "None" in str(f.type) and raw.lower() in {"", "omit"}:
             values[f.name] = None
+        elif raw:
+            values[f.name] = _coerce(getattr(defaults, f.name), raw, variable)
     for name, value in overrides.items():
         if value is not None:
-            values[name] = _coerce(getattr(defaults, name), value)
+            values[name] = _coerce(getattr(defaults, name), value, "--" + name.replace("_", "-"))
     return Config(**values)
 
 
-def _coerce(default: object, value: object) -> object:
+def _coerce(default: object, value: object, source: str) -> object:
     if isinstance(default, Path):
         return Path(str(value)).expanduser()
     if isinstance(default, bool):
         return str(value).lower() in {"1", "true", "yes", "on"}
-    if isinstance(default, int):
-        return int(value)
-    if isinstance(default, float):
-        return float(value)
+    try:
+        if isinstance(default, int):
+            return int(value)
+        if isinstance(default, float):
+            return float(value)
+    except ValueError:
+        kind = "a whole number" if isinstance(default, int) else "a number"
+        raise SystemExit(f"{source} must be {kind}, not {value!r}") from None
     return value

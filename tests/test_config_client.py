@@ -37,6 +37,28 @@ def test_empty_env_switches_an_optional_setting_off(monkeypatch: pytest.MonkeyPa
     assert config.load().reasoning_effort == "none"
     monkeypatch.setenv("DA_REASONING_EFFORT", "")
     assert config.load().reasoning_effort is None
+    # PowerShell deletes a variable set to "", so there is a word for it too.
+    monkeypatch.setenv("DA_REASONING_EFFORT", "omit")
+    assert config.load().reasoning_effort is None
+
+
+def test_a_bad_number_names_the_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DA_TOP_K", "acht")
+    with pytest.raises(SystemExit, match="DA_TOP_K must be a whole number, not 'acht'"):
+        config.load()
+
+
+@pytest.mark.parametrize(
+    ("base_url", "endpoint"),
+    [
+        ("http://127.0.0.1:11434", "http://127.0.0.1:11434"),
+        ("http://host:8080/v1/", "http://host:8080"),
+        ("localhost:11434", "http://localhost:11434"),
+        (" https://api.example.org/v1 ", "https://api.example.org"),
+    ],
+)
+def test_endpoint(base_url: str, endpoint: str) -> None:
+    assert config.load(base_url=base_url).endpoint == endpoint
 
 
 def test_strip_fences() -> None:
@@ -57,6 +79,12 @@ class Recorder(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(reply)))
         self.end_headers()
         self.wfile.write(reply)
+
+    def do_GET(self) -> None:  # noqa: N802 - http.server naming
+        Recorder.requests.append((self.path, dict(self.headers), {}))
+        self.send_response(200)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def log_message(self, *args: object) -> None:
         pass
@@ -114,3 +142,23 @@ def test_unreachable_endpoint_is_an_llm_error() -> None:
     assert not client.health()
     with pytest.raises(LLMError, match="cannot reach model"):
         client.chat([])
+
+
+def test_health_check_sends_the_api_key(server: str) -> None:
+    assert LLMClient(config.load(base_url=server, api_key="secret")).health()
+    path, headers, _ = Recorder.requests[0]
+    assert path == "/v1/models"
+    assert headers["Authorization"] == "Bearer secret"
+
+
+@pytest.mark.parametrize("reply", [{}, {"choices": []}, {"choices": [{"message": None}]}])
+def test_a_malformed_reply_is_an_llm_error(server: str, reply: dict) -> None:
+    Recorder.replies = [reply]
+    with pytest.raises(LLMError, match="unexpected reply"):
+        LLMClient(config.load(base_url=server)).chat([])
+
+
+def test_missing_embeddings_are_an_llm_error(server: str) -> None:
+    Recorder.replies = [{"data": [{"index": 0, "embedding": [1.0]}]}]
+    with pytest.raises(LLMError, match="asked for 2 embeddings, got 1"):
+        LLMClient(config.load(base_url=server)).embed(["a", "b"])
