@@ -1,4 +1,4 @@
-"""Command line: `devil` opens the conversation.
+"""Command line: `devil` opens the conversation, `devil <position>` opens it with a first position.
 
 Subcommands fetch data, build indexes and run the evaluations.
 """
@@ -8,8 +8,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterator
 from dataclasses import asdict
 from datetime import date
+from itertools import chain
 from pathlib import Path
 
 from rich.text import Text
@@ -32,8 +34,10 @@ Reply to its objections to continue the argument.
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv, opening = _split_opening(sys.argv[1:] if argv is None else list(argv))
     parser = _parser()
     args = parser.parse_args(argv)
+    args.opening = opening
     cfg = config.load(
         data_dir=args.data_dir,
         model=args.model,
@@ -51,11 +55,31 @@ def main(argv: list[str] | None = None) -> int:
         return 130
 
 
+_GLOBAL_OPTIONS_WITH_VALUE = {"--data-dir", "--model", "--embed-model", "--base-url"}
+
+
+def _split_opening(argv: list[str]) -> tuple[list[str], str]:
+    """`devil Ein Vertrag braucht nur Konsens.` opens the conversation with that position.
+
+    Returns the arguments for the parser and the opening position, if the first
+    word after the global options is not a subcommand.
+    """
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):
+        i += 2 if argv[i] in _GLOBAL_OPTIONS_WITH_VALUE else 1
+    if i >= len(argv) or argv[i] in COMMANDS:
+        return argv, ""
+    return argv[:i], " ".join(argv[i:]).strip()
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="devil",
+        usage="devil [options] [position ... | command ...]",
         description="Argues against your legal position with Swiss Federal Supreme Court "
         "precedent, and shows a quote only if it is verbatim in the cited Erwägung.",
+        epilog="`devil` opens the conversation. `devil <position>` opens it and answers that "
+        "position first. `devil argue <position>` answers once and exits.",
     )
     parser.add_argument("--version", action="version", version=f"devils-advocate {__version__}")
     parser.add_argument("--data-dir", help="where the corpus and indexes live")
@@ -216,7 +240,7 @@ def cmd_argue(cfg: config.Config, args: argparse.Namespace) -> int:
             else:
                 ui.render(rebuttal, show_discarded=args.show_discarded)
             return 0
-        return _conversation(cfg, db, client, retriever)
+        return _conversation(cfg, db, client, retriever, opening=getattr(args, "opening", ""))
 
 
 def open_retriever(cfg: config.Config, db: store.Store, client: LLMClient, mode: str) -> Retriever:
@@ -239,8 +263,22 @@ class _DenseOnly(Retriever):
         return []
 
 
+def _typed_lines() -> Iterator[str]:
+    while True:
+        try:
+            yield ui.console.input("[bold]you › [/bold]").strip()
+        except (EOFError, KeyboardInterrupt):
+            ui.console.print()
+            return
+
+
 def _conversation(
-    cfg: config.Config, db: store.Store, client: LLMClient, retriever: Retriever
+    cfg: config.Config,
+    db: store.Store,
+    client: LLMClient,
+    retriever: Retriever,
+    *,
+    opening: str = "",
 ) -> int:
     meta = db.meta()
     ui.console.print(
@@ -257,12 +295,7 @@ def _conversation(
     devil = Devil(client, retriever, top_k=cfg.top_k, max_claims=cfg.max_claims)
     turns: list[Rebuttal] = []
     show_discarded = False
-    while True:
-        try:
-            line = ui.console.input("[bold]you › [/bold]").strip()
-        except (EOFError, KeyboardInterrupt):
-            ui.console.print()
-            return 0
+    for line in chain([opening] if opening else [], _typed_lines()):
         if not line:
             continue
         if line.startswith("/"):
@@ -297,6 +330,7 @@ def _conversation(
             continue
         turns.append(rebuttal)
         ui.render(rebuttal, show_discarded=show_discarded)
+    return 0
 
 
 def _with_status(devil: Devil, position: str) -> Rebuttal:

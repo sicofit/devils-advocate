@@ -140,6 +140,37 @@ def test_devil_without_arguments_opens_the_conversation(
     assert fake_model.names() == ["analysis", "counterarguments"]
 
 
+def test_devil_with_a_position_answers_it_and_keeps_talking(
+    data_dir: Path,
+    fake_model: FakeModel,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    type_lines(monkeypatch, "Und bei Verfehlungen?")
+    assert cli.main(["--data-dir", str(data_dir), "Kündigung", "immer", "zulässig."]) == 0
+    assert "BGE 150 III 100 E. 2.2 S. 101" in capsys.readouterr().out
+    assert fake_model.names() == ["analysis", "counterarguments"] * 2
+    first, second = (messages for name, messages in fake_model.calls if name == "analysis")
+    assert "Kündigung immer zulässig." in str(first)
+    assert "Und bei Verfehlungen?" in str(second)
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        ([], ([], "")),
+        (["--version"], (["--version"], "")),
+        (["status"], (["status"], "")),
+        (["--model", "m", "argue", "x"], (["--model", "m", "argue", "x"], "")),
+        (["Ein", "Vertrag"], ([], "Ein Vertrag")),
+        (["--model", "m", "Ein", "Vertrag"], (["--model", "m"], "Ein Vertrag")),
+        (["--data-dir=d", "Vertrag", "--json"], (["--data-dir=d"], "Vertrag --json")),
+    ],
+)
+def test_split_opening(argv: list[str], expected: tuple[list[str], str]) -> None:
+    assert cli._split_opening(argv) == expected
+
+
 def test_conversation_warns_when_the_model_is_down(
     data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

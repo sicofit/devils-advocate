@@ -71,6 +71,7 @@ ollama pull qwen3.5:9b
 devil fetch    # BGE corpus from OpenCaseLaw (220 MB), pinned to a commit hash
 devil index    # ~6,800 decisions since 2000 -> ~126k passages in SQLite FTS5
 devil          # opens the conversation
+devil Ein Vertrag braucht nur Konsens.   # opens it with this position
 ```
 
 Reply to the devil's objections to continue the argument. In the conversation:
