@@ -1,0 +1,153 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pytest
+
+from devils_advocate import cli, store
+
+from fakes import DECISIONS, FakeModel, dumps, passages_in
+
+HOLDING = "Die fristlose Kündigung ist nur bei besonders schweren Verfehlungen gerechtfertigt."
+
+
+@pytest.fixture(autouse=True)
+def offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli.LLMClient, "health", lambda self: False)
+
+
+def respond(messages: list[dict], name: str) -> dict:
+    if name == "analysis":
+        return {
+            "language": "de",
+            "claims": [{"claim": messages[-1]["content"], "queries": ["Verfehlungen"]}],
+        }
+    label = next(k for k, text in passages_in(messages).items() if HOLDING in text)
+    return {"counterarguments": [{"passage": label, "quote": HOLDING, "argument": "a"}]}
+
+
+@pytest.fixture
+def fake_model(monkeypatch: pytest.MonkeyPatch) -> FakeModel:
+    model = FakeModel(respond)
+    monkeypatch.setattr(cli, "LLMClient", lambda cfg: model)
+    return model
+
+
+@pytest.fixture
+def data_dir(tmp_path: Path) -> Path:
+    store.build(tmp_path / "index.sqlite", DECISIONS, {"since": "1990", "revision": "test"})
+    return tmp_path
+
+
+def test_version(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["--version"])
+    assert exit_info.value.code == 0
+    assert "devils-advocate 0.1.0" in capsys.readouterr().out
+
+
+def test_status_on_an_empty_data_dir(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["--data-dir", str(tmp_path), "status"]) == 0
+    out = capsys.readouterr().out
+    assert "missing" in out and "model reachable" in out
+
+
+def test_commands_need_their_inputs(tmp_path: Path) -> None:
+    empty = ["--data-dir", str(tmp_path)]
+    assert cli.main([*empty, "argue", "Eine Behauptung."]) == 1
+    assert cli.main([*empty, "index"]) == 1
+    assert cli.main([*empty, "embed"]) == 1
+    assert cli.main([*empty, "bench"]) == 1
+    assert cli.main([*empty, "eval"]) == 1
+
+
+def test_index_reads_the_parquet_corpus(tmp_path: Path) -> None:
+    rows = [
+        {
+            "decision_id": "bge_" + d.reference.removeprefix("BGE "),
+            "decision_date": d.date,
+            "language": d.language,
+            "full_text": d.text,
+            "source_url": d.url,
+        }
+        for d in DECISIONS
+    ]
+    pq.write_table(pa.Table.from_pylist(rows), tmp_path / "bge.parquet")
+    assert cli.main(["--data-dir", str(tmp_path), "index", "--since", "2000"]) == 0
+    with store.Store(tmp_path / "index.sqlite") as db:
+        assert db.has_decision("BGE 150 III 100")
+        assert not db.has_decision("BGE 120 II 50")  # decided in 1994
+        assert db.meta()["since"] == "2000"
+
+
+def test_argue_once_as_json(
+    data_dir: Path, fake_model: FakeModel, capsys: pytest.CaptureFixture[str]
+) -> None:
+    position = "Eine fristlose Kündigung ist immer zulässig."
+    code = cli.main(["--data-dir", str(data_dir), "argue", "--json", position])
+    assert code == 0
+    out = capsys.readouterr().out
+    result = json.loads(out[out.index("{") :])
+    [claim] = result["claims"]
+    [counter] = claim["counterarguments"]
+    assert counter == {
+        "argument": "a",
+        "quote": HOLDING,
+        "citation": "BGE 150 III 100 E. 2.2 S. 101",
+        "match": "exact",
+    }
+    assert result["position"] == position
+
+
+def test_argue_renders_for_humans(
+    data_dir: Path, fake_model: FakeModel, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--data-dir", str(data_dir), "argue", "Kündigung immer zulässig."]) == 0
+    out = capsys.readouterr().out
+    assert "BGE 150 III 100 E. 2.2 S. 101" in out
+    assert "besonders schweren Verfehlungen" in out
+
+
+def test_dense_retriever_needs_vectors(data_dir: Path, fake_model: FakeModel) -> None:
+    with pytest.raises(SystemExit, match="No vectors"):
+        cli.main(["--data-dir", str(data_dir), "argue", "--retriever", "dense", "x"])
+
+
+def test_eval_writes_report_and_badge(data_dir: Path, fake_model: FakeModel) -> None:
+    cases = data_dir / "cases.jsonl"
+    cases.write_text(
+        dumps({"id": "c1", "position": "Kündigung immer zulässig.", "expect": ["BGE 150 III 100"]})
+        + "\n",
+        encoding="utf-8",
+    )
+    out = data_dir / "results"
+    args = ["--data-dir", str(data_dir), "eval", "--cases", str(cases), "--out", str(out)]
+    assert cli.main(args) == 0
+    report = json.loads((out / "end_to_end.json").read_text(encoding="utf-8"))
+    assert report["summary"]["found_expected"] == 1
+    assert report["retriever"] == "bm25"
+    badge = json.loads((out / "badge.json").read_text(encoding="utf-8"))
+    assert badge["message"] == "1/1" and badge["schemaVersion"] == 1
+
+
+def test_bench_writes_retrieval_report(data_dir: Path, fake_model: FakeModel) -> None:
+    out = data_dir / "results"
+    args = ["--data-dir", str(data_dir), "bench", "--modes", "bm25,hybrid", "--out", str(out)]
+    assert cli.main(args) == 0
+    report = json.loads((out / "retrieval.json").read_text(encoding="utf-8"))
+    assert list(report["modes"]) == ["bm25"]  # no vectors, so hybrid is skipped
+    assert report["queries"] == 1
+    assert report["index"]["revision"] == "test"
+
+
+def test_corpus_hash_matches_hashlib(tmp_path: Path) -> None:
+    import hashlib
+
+    from devils_advocate import corpus
+
+    path = tmp_path / "f.bin"
+    path.write_bytes(b"x" * 3_000_000)
+    assert corpus.sha256(path) == hashlib.sha256(b"x" * 3_000_000).hexdigest()
