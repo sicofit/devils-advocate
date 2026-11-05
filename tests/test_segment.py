@@ -6,6 +6,7 @@ from devils_advocate.segment import (
     citation_of,
     ends_with_abbreviation,
     first_page,
+    names_another_decision,
     segment,
 )
 
@@ -105,3 +106,88 @@ def test_paragraphs_survive_a_sentence_ending_in_an_abbreviation_letter() -> Non
     text = "Erwägungen\n2.\nDas Gericht muss entscheiden.\nDie Frage ist offen.\n"
     [passage] = segment("BGE 140 I 10", text)
     assert passage.text == "Das Gericht muss entscheiden.\nDie Frage ist offen."
+
+
+SEITENWECHSEL = """\
+Regeste
+Kurz.
+Sachverhalt
+BGE 141 III 200 S. 200
+A. klagte.
+Erwägungen
+Aus den Erwägungen:
+5.
+Die Vorinstanz hat die Frist richtig berechnet. Sie begann mit der Zustellung
+BGE 141 III 200 S. 201
+und endete zehn Tage später.
+5.1.1
+Nach Art. 3 gilt:
+3
+Die Frist steht still.
+6.
+Die Beschwerde ist abzuweisen.
+Dispositiv
+1.
+Die Beschwerde wird abgewiesen.
+"""
+
+
+def test_a_passage_records_where_a_new_page_begins() -> None:
+    passages = by_pinpoint("BGE 141 III 200", SEITENWECHSEL)
+    five = passages["E. 5"]
+    assert five.page == 200
+    assert "S. 201" not in five.text
+    later = five.text.index("und endete")
+    assert five.breaks == ((later, 201),)
+    assert five.citation == "BGE 141 III 200 E. 5 S. 200"
+    assert five.citation_of_span(0, 20) == "BGE 141 III 200 E. 5 S. 200"
+    assert five.citation_of_span(0, len(five.text)) == "BGE 141 III 200 E. 5 S. 200 f."
+    assert five.citation_of_span(later, len(five.text)) == "BGE 141 III 200 E. 5 S. 201"
+
+
+def test_quotes_over_several_pages_are_cited_ff() -> None:
+    passage = Passage("BGE 1 I 1", "E. 2", 5, "a b c d", ((2, 6), (4, 7)))
+    assert passage.citation_of_span(0, 6) == "BGE 1 I 1 E. 2 S. 5 ff."
+    assert passage.citation_of_span(2, 4) == "BGE 1 I 1 E. 2 S. 6"
+
+
+def test_excerpts_may_start_late_and_skip_a_level() -> None:
+    # An excerpt ("Aus den Erwägungen") begins at E. 5; E. 5.1.1 has no 5.1 above it.
+    assert [p.pinpoint for p in segment("BGE 141 III 200", SEITENWECHSEL)] == [
+        "Regeste",
+        "E. 5",
+        "E. 5.1.1",
+        "E. 6",
+    ]
+
+
+def test_a_bare_number_is_a_statute_paragraph_not_a_heading() -> None:
+    passages = by_pinpoint("BGE 141 III 200", SEITENWECHSEL)
+    assert "E. 3" not in passages
+    assert passages["E. 5.1.1"].text.endswith("Die Frist steht still.")
+
+
+def test_the_dispositiv_is_not_part_of_the_reasoning() -> None:
+    passages = by_pinpoint("BGE 141 III 200", SEITENWECHSEL)
+    assert "abgewiesen" not in " ".join(p.text for p in passages.values())
+    assert "E. 1" not in passages
+
+
+def test_a_decision_filed_under_another_reference_is_recognised() -> None:
+    assert names_another_decision("BGE 141 III 300", SEITENWECHSEL)
+    assert not names_another_decision("BGE 141 III 200", SEITENWECHSEL)
+    assert not names_another_decision("BGE 141 III 300", "Regeste\nOhne Seitenzahlen.\n")
+    french = "ATF 141 III 200 S. 201\n"
+    assert not names_another_decision("BGE 141 III 200", french)
+
+
+def test_chunks_do_not_end_at_an_abbreviation_or_inside_brackets() -> None:
+    text = (
+        "Die Frist ist gewahrt (vgl. BGE 140 III 86 E. 2. Dort wurde es offengelassen). "
+        "Der Arbeitgeber muss die Kündigung begründen, wenn dies verlangt wird. " * 12
+    )
+    spans = _chunk(text.strip(), limit=400)
+    pieces = [text[s:e] for s, e in spans]
+    assert len(pieces) > 1
+    assert all(not piece.endswith("E. 2.") for piece in pieces)
+    assert all(piece.count("(") == piece.count(")") for piece in pieces)

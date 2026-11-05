@@ -4,15 +4,18 @@ The OpenCaseLaw texts are scraped from the Federal Supreme Court's HTML. Three
 artifacts of that scrape matter here:
 
 * Page markers ("BGE 145 III 72 S. 75") stand on their own lines, sometimes in
-  the middle of a sentence. They are removed from the text and used to record
-  the page each passage starts on.
+  the middle of a sentence. They are removed from the text, and the offsets at
+  which a new page begins are kept with the passage, so a quote is cited with
+  the page it is on.
 * Hyperlinked statute and case references ("Art. 19 Abs. 1 lit. a URG") are
   broken onto their own lines. Those lines are joined back into the sentence.
 * Erwägung numbers ("2.", "2.1", "4.3.2") stand alone on a line. Older
   decisions subdivide with "a)", "b)" and "aa)" at the start of a paragraph.
+  A bare number without a dot ("2") is not a heading: it is a statute
+  paragraph, a table value or the "2" of "m2" broken onto its own line.
 
-Each passage carries a pinpoint ("E. 2.1", "E. 3b/aa") and a page, so a quote
-can be cited the way a Swiss lawyer cites it: "BGE 145 III 72 E. 2.2.1 S. 76".
+Each passage carries a pinpoint ("E. 2.1", "E. 3b/aa") and its pages, so a
+quote can be cited the way a Swiss lawyer cites it: "BGE 145 III 72 E. 2.2.1 S. 76".
 """
 
 from __future__ import annotations
@@ -20,8 +23,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-PAGE_MARKER = re.compile(r"^(?:BGE|ATF|DTF) \d+ [IVX]+[a-z]? \d+ S\. (\d+)$")
-NUMBER_LINE = re.compile(r"^(\d{1,2}(?:\.\d{1,2}){0,4})\.?$")
+PAGE_MARKER = re.compile(r"^((?:BGE|ATF|DTF) \d+ [IVX]+[a-z]? \d+) S\. (\d+)$")
+NUMBER_LINE = re.compile(r"^(?:(\d{1,2})\.|(\d{1,2}(?:\.\d{1,2}){1,4})\.?)$")
 LETTER_START = re.compile(r"^([a-z])\1?\) ")
 # Artifact lines without content ("ab Seite 2") that the scrape sometimes leaves behind.
 NOISE_LINE = re.compile(r"^ab Seite \d+$")
@@ -75,6 +78,8 @@ SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+(?=[A-ZÄÖÜÀÉÈÊ«])")
 
 MAX_PASSAGE_CHARS = 1500
 
+PageBreaks = tuple[tuple[int, int], ...]  # (offset in the text, page that begins there)
+
 
 @dataclass(frozen=True, slots=True)
 class Passage:
@@ -82,6 +87,7 @@ class Passage:
     pinpoint: str  # "E. 2.1", or "Regeste"
     page: int | None  # page the passage starts on, when known
     text: str
+    breaks: PageBreaks = ()  # where in `text` a later page begins
 
     @property
     def citation(self) -> str:
@@ -90,11 +96,32 @@ class Passage:
         The Regeste is the court's headnote, not part of the reasoning, so a
         quote from it is marked as such.
         """
+        return self.citation_of_span(0, 0)
+
+    def citation_of_span(self, start: int, end: int) -> str:
+        """Citation of the text between offsets `start` and `end`, with the pages it is on.
+
+        "S. 76" when it is on one page, "S. 76 f." when it runs onto the next,
+        "S. 76 ff." when it runs further.
+        """
         if self.pinpoint == "Regeste":
             return f"{self.decision} (Regeste)"
         # Text before the first numbered Erwägung is cited by page alone.
         cite = self.decision if self.pinpoint == "E." else f"{self.decision} {self.pinpoint}"
-        return f"{cite} S. {self.page}" if self.page else cite
+        first = self.page_at(start)
+        if first is None:
+            return cite
+        last = self.page_at(max(start, end - 1))
+        suffix = "" if last is None or last <= first else " f." if last == first + 1 else " ff."
+        return f"{cite} S. {first}{suffix}"
+
+    def page_at(self, offset: int) -> int | None:
+        page = self.page
+        for start, value in self.breaks:
+            if start > offset:
+                break
+            page = value
+        return page
 
 
 def ends_with_abbreviation(text: str) -> bool:
@@ -122,6 +149,25 @@ def first_page(reference: str) -> int | None:
     return int(tail) if tail.isdigit() else None
 
 
+def _page_of(decision: str, line: str) -> int | None:
+    """The page a marker line starts, if it is a page marker of `decision`."""
+    marker = PAGE_MARKER.match(line)
+    if marker is None or "BGE" + marker.group(1)[3:] != decision:
+        return None
+    return int(marker.group(2))
+
+
+def names_another_decision(decision: str, full_text: str) -> bool:
+    """Whether every page marker in the text belongs to a different decision.
+
+    The dataset has a few rows whose text is that of another decision (the row
+    "152 I 2" holds the text of BGE 152 I 20). Indexing them would cite the
+    wrong reference.
+    """
+    markers = [m for line in full_text.splitlines() if (m := PAGE_MARKER.match(line.strip()))]
+    return bool(markers) and all("BGE" + m.group(1)[3:] != decision for m in markers)
+
+
 def segment(decision: str, full_text: str) -> list[Passage]:
     """Return the Regeste and the Erwägungen of one decision as passages."""
     lines = [line.strip() for line in full_text.splitlines()]
@@ -139,9 +185,7 @@ def segment(decision: str, full_text: str) -> list[Passage]:
         return passages
     page = first_page(decision)
     for line in lines[:start]:
-        marker = PAGE_MARKER.match(line)
-        if marker:
-            page = int(marker.group(1))
+        page = _page_of(decision, line) or page
     passages.extend(_erwaegungen(decision, lines[start:], page))
     return passages
 
@@ -170,23 +214,27 @@ def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Pass
             return
         pinpoint = _pinpoint(number, letters)
         for start, end in _chunk(text):
-            passages.append(Passage(decision, pinpoint, _page_at(pages, start), text[start:end]))
+            breaks = tuple((at - start, p) for at, p in pages if start < at < end and p is not None)
+            passages.append(
+                Passage(decision, pinpoint, _page_at(pages, start), text[start:end], breaks)
+            )
 
     seen_content = False
     for line in lines:
         if not line or NOISE_LINE.match(line):
             continue
-        marker = PAGE_MARKER.match(line)
-        if marker:
-            page = int(marker.group(1))
+        if PAGE_MARKER.match(line):
+            page = _page_of(decision, line) or page
             continue
+        if line == "Dispositiv":  # the operative part follows; it is not reasoning
+            break
         if not seen_content and number is None and INTRO_LINE.match(line):
             continue
         seen_content = True
 
         found = NUMBER_LINE.match(line)
         if found:
-            candidate = tuple(int(part) for part in found.group(1).split("."))
+            candidate = tuple(int(part) for part in (found.group(1) or found.group(2)).split("."))
             if _follows(number, candidate):
                 flush()
                 number, letters = candidate, []
@@ -210,18 +258,23 @@ def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Pass
 def _follows(current: tuple[int, ...] | None, candidate: tuple[int, ...]) -> bool:
     """Whether `candidate` plausibly is the next Erwägung heading after `current`.
 
-    Excerpts skip Erwägungen ("Aus den Erwägungen" may print 2, 5 and 7), so a
-    jump forward is allowed. A number that goes backwards or skips a level is a
-    numbered list item inside the text, not a heading.
+    Published decisions are often excerpts: "Aus den Erwägungen" may print 2, 5
+    and 7, start at 2.5, or go from 2 straight to 2.3.3 or from 1.1 to 2.4. So
+    a heading may jump forward, at any level. A number that goes backwards, or
+    jumps implausibly far, is a numbered list item inside the text.
     """
     if current is None:
-        return len(candidate) == 1 and 1 <= candidate[0] <= 40
-    if candidate[: len(current)] == current and len(candidate) == len(current) + 1:
-        return 1 <= candidate[-1] <= 9
-    for depth in range(len(current), 0, -1):
-        if len(candidate) == depth and candidate[:-1] == current[: depth - 1]:
-            return current[depth - 1] < candidate[-1] <= current[depth - 1] + 20
-    return False
+        return 1 <= candidate[0] <= 40 and all(1 <= part <= 20 for part in candidate[1:])
+    common = 0
+    while common < min(len(current), len(candidate)) and current[common] == candidate[common]:
+        common += 1
+    if common == len(candidate):  # the same heading again, or a level above it
+        return False
+    if common == len(current):  # a subdivision of the current heading
+        return all(1 <= part <= 20 for part in candidate[common:])
+    return current[common] < candidate[common] <= current[common] + 20 and all(
+        1 <= part <= 20 for part in candidate[common + 1 :]
+    )
 
 
 def _next_letters(letters: list[str], label: str) -> list[str] | None:
@@ -296,7 +349,7 @@ def _chunk(text: str, limit: int = MAX_PASSAGE_CHARS) -> list[tuple[int, int]]:
         return [(0, len(text))]
     breaks = sorted(
         {m.start() for m in re.finditer("\n", text)}
-        | {m.start() for m in SENTENCE_BREAK.finditer(text)}
+        | {m.start() for m in SENTENCE_BREAK.finditer(text) if _sentence_ends(text, m.start())}
     )
     spans: list[tuple[int, int]] = []
     start = 0
@@ -309,6 +362,18 @@ def _chunk(text: str, limit: int = MAX_PASSAGE_CHARS) -> list[tuple[int, int]]:
     if start < len(text):
         spans.append((start, len(text)))
     return [(s, e) for s, e in spans if text[s:e].strip()]
+
+
+def _sentence_ends(text: str, position: int) -> bool:
+    """Whether the break before `position` ends a sentence.
+
+    Not after an abbreviation ("i.V.m. Art. 40") and not inside parentheses
+    ("(cf. Message ...)").
+    """
+    before = text[text.rfind("\n", 0, position) + 1 : position]  # the paragraph so far
+    if ends_with_abbreviation(before):
+        return False
+    return before.count("(") <= before.count(")")
 
 
 def _skip_space(text: str, position: int) -> int:

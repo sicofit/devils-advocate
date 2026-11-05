@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import numpy as np
@@ -160,3 +161,21 @@ def test_model_prefixes_and_paths() -> None:
     assert (
         vectors_path(Path("d"), "qwen3-embedding:0.6b").name == "vectors-qwen3-embedding_0.6b.npy"
     )
+
+
+def test_page_breaks_survive_the_store(tmp_path: Path) -> None:
+    text = (
+        "Regeste\nKurz.\nErwägungen\n2.\nDie Frist begann mit der Zustellung\n"
+        "BGE 141 III 200 S. 201\nund endete zehn Tage später.\n"
+    )
+    decision = Decision("BGE 141 III 200", "2015-01-01", "de", text, "")
+    foreign = Decision("BGE 141 III 300", "2015-01-01", "de", text, "")
+    decisions, _ = store.build(tmp_path / "x.sqlite", [decision, foreign], {})
+    assert decisions == 1  # the second one carries the page markers of another decision
+    with store.Store(tmp_path / "x.sqlite") as db:
+        [_, two] = db.passages_of("BGE 141 III 200")
+    assert two.breaks == ((two.text.index("und endete"), 201),)
+    assert two.citation_of_span(0, len(two.text)) == "BGE 141 III 200 E. 2 S. 200 f."
+    with sqlite3.connect(tmp_path / "x.sqlite") as raw:
+        stored = [row[0] for row in raw.execute("SELECT breaks FROM passages ORDER BY id")]
+    assert stored == [None, f"[[{two.breaks[0][0]}, 201]]"]  # NULL where the page never changes

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from collections.abc import Callable, Iterable
@@ -9,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .corpus import Decision
-from .segment import Passage, segment
+from .segment import PageBreaks, Passage, names_another_decision, segment
 
 SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -25,7 +26,8 @@ CREATE TABLE passages (
     reference TEXT NOT NULL REFERENCES decisions(reference),
     pinpoint TEXT NOT NULL,
     page INTEGER,
-    text TEXT NOT NULL
+    text TEXT NOT NULL,
+    breaks TEXT  -- JSON [[offset, page], ...] where a later page begins, or NULL
 );
 CREATE INDEX passages_reference ON passages(reference);
 CREATE VIRTUAL TABLE passages_fts USING fts5(
@@ -62,13 +64,17 @@ class StoredPassage:
     text: str
     language: str
     year: int
+    breaks: PageBreaks = ()
 
     def as_passage(self) -> Passage:
-        return Passage(self.reference, self.pinpoint, self.page, self.text)
+        return Passage(self.reference, self.pinpoint, self.page, self.text, self.breaks)
 
     @property
     def citation(self) -> str:
         return self.as_passage().citation
+
+    def citation_of_span(self, start: int, end: int) -> str:
+        return self.as_passage().citation_of_span(start, end)
 
 
 def build(
@@ -83,6 +89,8 @@ def build(
     decision_count = passage_count = 0
     try:
         for decision in decisions:
+            if names_another_decision(decision.reference, decision.text):
+                continue
             passages = segment(decision.reference, decision.text)
             if not passages:
                 continue
@@ -97,6 +105,13 @@ def build(
         store.close()
     tmp.replace(path)
     return decision_count, passage_count
+
+
+def _stored(row: sqlite3.Row) -> StoredPassage:
+    values = dict(row)
+    breaks = values.pop("breaks", None)
+    pages = tuple((int(at), int(page)) for at, page in json.loads(breaks)) if breaks else ()
+    return StoredPassage(**values, breaks=pages)
 
 
 def fts_query(text: str) -> str:
@@ -145,9 +160,13 @@ class Store:
             "INSERT OR REPLACE INTO decisions VALUES (?, ?, ?, ?, ?)",
             (reference, date, year, language, url),
         )
-        rows = [(reference, p.pinpoint, p.page, p.text) for p in passages]
+        rows = [
+            (reference, p.pinpoint, p.page, p.text, json.dumps(p.breaks) if p.breaks else None)
+            for p in passages
+        ]
         self.db.executemany(
-            "INSERT INTO passages (reference, pinpoint, page, text) VALUES (?, ?, ?, ?)", rows
+            "INSERT INTO passages (reference, pinpoint, page, text, breaks) VALUES (?, ?, ?, ?, ?)",
+            rows,
         )
         return len(rows)
 
@@ -176,11 +195,11 @@ class Store:
             return []
         marks = ",".join("?" * len(ids))
         rows = self.db.execute(
-            "SELECT p.id, p.reference, p.pinpoint, p.page, p.text, d.language, d.year "
+            "SELECT p.id, p.reference, p.pinpoint, p.page, p.text, p.breaks, d.language, d.year "
             f"FROM passages p JOIN decisions d USING (reference) WHERE p.id IN ({marks})",
             ids,
         ).fetchall()
-        by_id = {row["id"]: StoredPassage(**dict(row)) for row in rows}
+        by_id = {row["id"]: _stored(row) for row in rows}
         return [by_id[i] for i in ids if i in by_id]
 
     def passages_of(self, reference: str) -> list[StoredPassage]:
