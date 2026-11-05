@@ -259,18 +259,36 @@ def cmd_argue(cfg: config.Config, args: argparse.Namespace) -> int:
 
 
 def open_retriever(cfg: config.Config, db: store.Store, client: LLMClient, mode: str) -> Retriever:
-    path = vectors_path(cfg.data_dir, cfg.embed_model)
-    wants_dense = mode in ("dense", "hybrid") or (mode == "auto" and path.exists())
-    if not wants_dense:
+    if mode == "bm25":
         return Retriever(db)
-    if not path.exists():
-        raise SystemExit(
-            f"No vectors for {cfg.embed_model}. Run `devil embed` or use --retriever bm25."
-        )
-    vectors = VectorIndex.load(path)
+    vectors = _vectors(cfg, db, required=mode != "auto")
+    if vectors is None:
+        return Retriever(db)
     if mode == "dense":
         return _DenseOnly(db, client, vectors)
     return Retriever(db, client, vectors)
+
+
+def _vectors(cfg: config.Config, db: store.Store, *, required: bool) -> VectorIndex | None:
+    """The vectors of `cfg.embed_model`, if they exist and fit the current index."""
+    path = vectors_path(cfg.data_dir, cfg.embed_model)
+    if not path.exists():
+        if required:
+            raise SystemExit(
+                f"No vectors for {cfg.embed_model}. Run `devil embed` or use --retriever bm25."
+            )
+        return None
+    vectors = VectorIndex.load(path)
+    if vectors.matches(db):
+        return vectors
+    message = (
+        f"The vectors for {cfg.embed_model} belong to an earlier index. "
+        "Run `devil embed` again to use dense retrieval."
+    )
+    if required:
+        raise SystemExit(message)
+    ui.meta(message + " Using BM25 for now.")
+    return None
 
 
 class _DenseOnly(Retriever):
@@ -406,17 +424,16 @@ def cmd_bench(cfg: config.Config, args: argparse.Namespace) -> int:
         ui.error("No index yet. Run `devil index` first.")
         return 1
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
-    path = vectors_path(cfg.data_dir, cfg.embed_model)
-    if not path.exists() and any(m.split("+")[0] != "bm25" for m in modes):
-        ui.meta(f"No vectors for {cfg.embed_model}; skipping dense and hybrid.")
+    client = LLMClient(cfg)
+    with store.Store(cfg.db_path) as db:
+        vectors = _vectors(cfg, db, required=False)
+    if vectors is None and any(m.split("+")[0] != "bm25" for m in modes):
+        ui.meta(f"No usable vectors for {cfg.embed_model}; skipping dense and hybrid.")
         modes = [m for m in modes if m.split("+")[0] == "bm25"]
     if args.translate:
         modes += [f"{m}+translate" for m in modes if "+" not in m]
-    client = LLMClient(cfg)
     with store.Store(cfg.db_path) as db, ui.console.status("building queries") as status:
-        retriever = (
-            Retriever(db, client, VectorIndex.load(path)) if path.exists() else Retriever(db)
-        )
+        retriever = Retriever(db, client, vectors) if vectors is not None else Retriever(db)
         queries = bench.build_queries(db, n=args.n, seed=args.seed)
         translations = None
         if args.translate:

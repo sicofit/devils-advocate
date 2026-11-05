@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,7 +101,15 @@ def build(
             decision_count += 1
             if on_progress:
                 on_progress(decision_count, passage_count)
-        store.finish({**meta, "decisions": str(decision_count), "passages": str(passage_count)})
+        store.finish(
+            {
+                **meta,
+                "decisions": str(decision_count),
+                "passages": str(passage_count),
+                # Vectors record the build they were embedded from, so stale ones are noticed.
+                "build_id": uuid.uuid4().hex,
+            }
+        )
     finally:
         store.close()
     tmp.replace(path)

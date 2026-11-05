@@ -8,8 +8,9 @@ import pyarrow.parquet as pq
 import pytest
 
 from devils_advocate import cli, store
+from devils_advocate.search import build_vectors, vectors_path
 
-from fakes import DECISIONS, FakeModel, dumps, passages_in
+from fakes import DECISIONS, FakeModel, HashEmbedder, dumps, passages_in
 
 HOLDING = "Die fristlose Kündigung ist nur bei besonders schweren Verfehlungen gerechtfertigt."
 
@@ -244,6 +245,23 @@ def test_conversation_warns_when_the_model_is_down(
 def test_dense_retriever_needs_vectors(data_dir: Path, fake_model: FakeModel) -> None:
     with pytest.raises(SystemExit, match="No vectors"):
         cli.main(["--data-dir", str(data_dir), "argue", "--retriever", "dense", "x"])
+
+
+def test_vectors_from_an_earlier_index_are_not_used(
+    data_dir: Path, fake_model: FakeModel, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with store.Store(data_dir / "index.sqlite") as db:
+        build_vectors(
+            db, HashEmbedder(), "nomic-embed-text", vectors_path(data_dir, "nomic-embed-text")
+        )
+    store.build(data_dir / "index.sqlite", DECISIONS, {"revision": "test"})
+    base = ["--data-dir", str(data_dir), "argue"]
+    with pytest.raises(SystemExit, match="earlier index"):
+        cli.main([*base, "--retriever", "hybrid", "Kündigung immer zulässig."])
+    assert cli.main([*base, "Kündigung immer zulässig."]) == 0  # auto falls back to BM25
+    captured = capsys.readouterr()
+    assert "Using BM25 for now." in captured.out
+    assert "BGE 150 III 100" in captured.out  # FakeModel cannot embed, so this was BM25
 
 
 def test_eval_writes_report_and_badge(data_dir: Path, fake_model: FakeModel) -> None:

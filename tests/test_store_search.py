@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -110,6 +111,38 @@ def test_build_vectors_resumes_after_a_failure(db: store.Store, tmp_path: Path) 
     fresh = build_vectors(db, HashEmbedder(), "hash-test", tmp_path / "fresh.npy", batch=2)
     assert second.calls < HashEmbedder().calls + db.count()  # did not start over
     assert np.array_equal(np.load(path), np.load(fresh))
+
+
+def test_vectors_belong_to_the_index_they_were_built_from(db_path: Path, tmp_path: Path) -> None:
+    path = tmp_path / "v.npy"
+    with store.Store(db_path) as db:
+        build_vectors(db, HashEmbedder(), "hash-test", path, batch=4)
+        assert VectorIndex.load(path).matches(db)
+    store.build(db_path, DECISIONS, {"revision": "test"})  # same passages, new build
+    with store.Store(db_path) as db:
+        assert not VectorIndex.load(path).matches(db)
+
+
+@pytest.mark.parametrize(
+    "leftover",
+    [
+        None,  # a .part without its .json
+        {"model": "other-model", "dims": 64, "count": 0, "index": ""},
+        {"model": "hash-test", "dims": 64, "count": 0, "index": "an-earlier-build"},
+    ],
+)
+def test_build_vectors_ignores_a_part_file_from_another_run(
+    db: store.Store, tmp_path: Path, leftover: dict | None
+) -> None:
+    path = tmp_path / "v.npy"
+    path.with_name(path.name + ".part").write_bytes(bytes(2 * 64 * 3))  # three rows of zeros
+    if leftover is not None:
+        leftover["count"] = db.count()
+        path.with_suffix(".json").write_text(json.dumps(leftover), encoding="utf-8")
+    build_vectors(db, HashEmbedder(), "hash-test", path, batch=4)
+    fresh = build_vectors(db, HashEmbedder(), "hash-test", tmp_path / "fresh.npy", batch=4)
+    assert np.array_equal(np.load(path), np.load(fresh))
+    assert VectorIndex.load(path).matches(db)
 
 
 def test_build_vectors_retries_a_failed_batch(

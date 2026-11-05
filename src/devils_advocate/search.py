@@ -42,10 +42,11 @@ def vectors_path(data_dir: Path, model: str) -> Path:
 class VectorIndex:
     """Unit-normalised passage embeddings, one row per passage id, in id order."""
 
-    def __init__(self, ids: np.ndarray, matrix: np.ndarray, model: str) -> None:
+    def __init__(self, ids: np.ndarray, matrix: np.ndarray, model: str, index: str = "") -> None:
         self.ids = ids
         self.matrix = matrix
         self.model = model
+        self.index = index  # build_id of the index the passages were embedded from
 
     @classmethod
     def load(cls, path: Path) -> VectorIndex:
@@ -54,7 +55,11 @@ class VectorIndex:
         # has no fast float16 matrix product.
         matrix = np.load(path).astype(np.float32)
         ids = np.load(path.with_suffix(".ids.npy"))
-        return cls(ids, matrix, meta["model"])
+        return cls(ids, matrix, meta["model"], meta.get("index", ""))
+
+    def matches(self, store: Store) -> bool:
+        """Whether these vectors were embedded from the passages now in `store`."""
+        return self.index == store.meta().get("build_id") and len(self.ids) == store.count()
 
     def search_many(
         self, queries: np.ndarray, k: int, exclude: Sequence[np.ndarray] | None = None
@@ -89,15 +94,25 @@ def build_vectors(
     """
     _, doc_prefix = prefixes(model)
     total = store.count()
+    index = store.meta().get("build_id", "")
     partial = path.with_name(path.name + ".part")
+    meta_path = path.with_suffix(".json")
     dims = None
     done = 0
     if partial.exists():
-        meta = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
-        dims = meta["dims"]
-        done = partial.stat().st_size // (2 * dims)
-        with partial.open("r+b") as fh:  # drop a half-written row
-            fh.truncate(done * 2 * dims)
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        same_run = (meta.get("model"), meta.get("count"), meta.get("index")) == (
+            model,
+            total,
+            index,
+        )
+        if same_run and meta.get("dims"):
+            dims = meta["dims"]
+            done = partial.stat().st_size // (2 * dims)
+            with partial.open("r+b") as fh:  # drop a half-written row
+                fh.truncate(done * 2 * dims)
+        else:  # left over from another model or another index: start again
+            partial.unlink()
 
     texts: list[str] = []
     with partial.open("ab") as out:
@@ -108,8 +123,9 @@ def build_vectors(
             rows /= np.linalg.norm(rows, axis=1, keepdims=True) + 1e-12
             if dims is None:
                 dims = rows.shape[1]
-                path.with_suffix(".json").write_text(
-                    json.dumps({"model": model, "dims": dims, "count": total}), encoding="utf-8"
+                meta_path.write_text(
+                    json.dumps({"model": model, "dims": dims, "count": total, "index": index}),
+                    encoding="utf-8",
                 )
             out.write(rows.astype(np.float16).tobytes())
             out.flush()
@@ -127,8 +143,11 @@ def build_vectors(
 
     assert dims is not None, "the store has no passages"
     matrix = np.fromfile(partial, dtype=np.float16).reshape(-1, dims)
+    ids = np.asarray(store.ids(), dtype=np.int64)
+    if len(ids) != len(matrix):
+        raise RuntimeError(f"embedded {len(matrix)} passages but the index has {len(ids)}")
     np.save(path, matrix)
-    np.save(path.with_suffix(".ids.npy"), np.asarray(store.ids(), dtype=np.int64))
+    np.save(path.with_suffix(".ids.npy"), ids)
     partial.unlink()
     return path
 
