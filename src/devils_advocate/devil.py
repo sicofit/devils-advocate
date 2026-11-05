@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -14,6 +15,7 @@ from .verify import Status, verify
 
 MAX_COUNTERS = 3
 PER_DECISION = 2
+LABEL = re.compile(r"\bP(\d+)\b")
 
 
 @dataclass(slots=True)
@@ -22,10 +24,14 @@ class Counter:
     quote: str  # cut from the passage, never the model's wording
     status: Status  # EXACT or CLOSE
     passage: StoredPassage
+    spans: tuple[tuple[int, int], ...] = ()  # where the quote is in passage.text
 
     @property
     def citation(self) -> str:
-        return self.passage.citation
+        """The passage's citation, with the page(s) the quote itself is on."""
+        if not self.spans:
+            return self.passage.citation
+        return self.passage.citation_of_span(self.spans[0][0], self.spans[-1][1])
 
 
 @dataclass(slots=True)
@@ -79,10 +85,12 @@ class Devil:
         self.top_k = top_k
         self.max_claims = max_claims
         self.on_stage = on_stage or (lambda _: None)
-        self.history: list[str] = []
+        self.history: list[prompts.Turn] = []
+        self.cited: set[int] = set()  # passages quoted earlier in this conversation
 
     def reset(self) -> None:
         self.history.clear()
+        self.cited.clear()
 
     def argue(self, argument: str) -> Rebuttal:
         started = time.perf_counter()
@@ -93,23 +101,35 @@ class Devil:
             name="analysis",
         )
         language = str(analysis.get("language") or "en")
+        items = analysis.get("claims")
         claims = [
             ClaimResult(str(item.get("claim", "")).strip(), _strings(item.get("queries")))
-            for item in analysis.get("claims") or []
+            for item in (items if isinstance(items, list) else [])
             if isinstance(item, dict) and str(item.get("claim", "")).strip()
         ][: self.max_claims]
 
         for number, claim in enumerate(claims, 1):
             self.on_stage(f"Searching precedent against claim {number}/{len(claims)}")
-            claim.hits = self.retriever.search(
-                [claim.claim, *claim.queries], self.top_k, per_decision=PER_DECISION
+            hits = self.retriever.search(
+                [claim.claim, *claim.queries],
+                self.top_k + len(self.cited),
+                per_decision=PER_DECISION,
             )
+            # A follow-up turn gets new precedent, not the passages already quoted.
+            claim.hits = [h for h in hits if h.passage.id not in self.cited][: self.top_k]
             if not claim.hits:
                 continue
             self.on_stage(f"Arguing against claim {number}/{len(claims)}")
             self._counter(claim, language)
 
-        self.history.append(argument)
+        self.history.append(
+            prompts.Turn(
+                argument,
+                [c.claim for c in claims],
+                [counter.citation for c in claims for counter in c.counters],
+            )
+        )
+        self.cited.update(counter.passage.id for c in claims for counter in c.counters)
         return Rebuttal(argument, language, claims, time.perf_counter() - started)
 
     def _counter(self, claim: ClaimResult, language: str) -> None:
@@ -121,16 +141,17 @@ class Devil:
                 language,
                 MAX_COUNTERS,
             ),
-            prompts.COUNTER_SCHEMA,
+            prompts.counter_schema(list(labelled)),
             name="counterarguments",
         )
         used: set[int] = set()
-        for item in reply.get("counterarguments") or []:
+        items = reply.get("counterarguments")
+        for item in items if isinstance(items, list) else []:
             if not isinstance(item, dict):
                 continue
-            label = str(item.get("passage", "")).strip().strip("[]")
+            label = _label(item.get("passage"))
             quote = str(item.get("quote", ""))
-            argument = str(item.get("argument", "")).strip()
+            argument = _readable(str(item.get("argument", "")).strip(), labelled, language)
             passage = labelled.get(label)
             if passage is None:
                 claim.discarded.append(Discarded(label, quote, "cites a passage it was not given"))
@@ -142,9 +163,26 @@ class Devil:
             if passage.id in used:
                 continue
             used.add(passage.id)
-            claim.counters.append(Counter(argument, verdict.text, verdict.status, passage))
+            claim.counters.append(
+                Counter(argument, verdict.text, verdict.status, passage, verdict.spans)
+            )
             if len(claim.counters) == MAX_COUNTERS:
                 break
+
+
+def _label(value: object) -> str:
+    """'P3' from 'P3', 'p3', '[P3]' or 3."""
+    label = str(value if value is not None else "").strip().strip("[]").strip().upper()
+    return f"P{label}" if label.isdigit() else label
+
+
+def _readable(argument: str, labelled: dict[str, StoredPassage], language: str) -> str:
+    """Replace passage labels the reader never sees by references; Swiss spelling."""
+    argument = LABEL.sub(
+        lambda m: labelled[m.group(0)].reference if m.group(0) in labelled else m.group(0),
+        argument,
+    )
+    return argument.replace("ß", "ss") if language == "de" else argument
 
 
 def _strings(value: object) -> list[str]:

@@ -105,6 +105,35 @@ def test_at_most_max_counters(retriever: Retriever) -> None:
     assert len(claim.counters) == MAX_COUNTERS
 
 
+def test_labels_are_normalised_and_never_shown(retriever: Retriever) -> None:
+    def sloppy(m: list[dict]) -> list[dict]:
+        label = label_of(m, HOLDING)
+        return [
+            {
+                "passage": label.lower(),
+                "quote": HOLDING,
+                "argument": f"{label} verlangt eine besonders schwere Verfehlung, das heißt mehr.",
+            }
+        ]
+
+    [claim] = Devil(scripted(sloppy), retriever).argue(POSITION).claims
+    [counter] = claim.counters
+    assert counter.argument == (
+        "BGE 150 III 100 verlangt eine besonders schwere Verfehlung, das heisst mehr."
+    )
+
+
+def test_citation_names_the_page_of_the_quote(retriever: Retriever) -> None:
+    model = scripted(
+        lambda m: [{"passage": label_of(m, HOLDING), "quote": HOLDING, "argument": "a"}]
+    )
+    [claim] = Devil(model, retriever).argue(POSITION).claims
+    [counter] = claim.counters
+    start, end = counter.spans[0]
+    assert counter.passage.text[start:end] == HOLDING
+    assert counter.citation == "BGE 150 III 100 E. 2.2 S. 101"
+
+
 def test_no_claim_means_no_search_and_no_counter(retriever: Retriever) -> None:
     model = FakeModel(lambda m, name: {"language": "en", "claims": []})
     rebuttal = Devil(model, retriever).argue("What a lovely day.")

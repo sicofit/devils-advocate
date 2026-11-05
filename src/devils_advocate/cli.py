@@ -6,6 +6,7 @@ Subcommands fetch data, build indexes and run the evaluations.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from collections.abc import Iterator
@@ -34,6 +35,7 @@ Reply to its objections to continue the argument.
 
 
 def main(argv: list[str] | None = None) -> int:
+    _utf8_stdio()
     argv, opening = _split_opening(sys.argv[1:] if argv is None else list(argv))
     parser = _parser()
     args = parser.parse_args(argv)
@@ -55,6 +57,18 @@ def main(argv: list[str] | None = None) -> int:
         return 130
 
 
+def _utf8_stdio() -> None:
+    """Read and write UTF-8 even where the console or a pipe defaults to cp1252.
+
+    Quotes are full of „“«»≈✓, which would otherwise crash `devil argue --json > out.json`
+    on Windows. Characters that still cannot be written become "?" instead of an error.
+    """
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        # Skipped where a test harness replaced the stream or it is already in use.
+        with contextlib.suppress(AttributeError, ValueError, OSError):
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+
+
 _GLOBAL_OPTIONS_WITH_VALUE = {"--data-dir", "--model", "--embed-model", "--base-url"}
 
 
@@ -69,7 +83,7 @@ def _split_opening(argv: list[str]) -> tuple[list[str], str]:
         i += 2 if argv[i] in _GLOBAL_OPTIONS_WITH_VALUE else 1
     if i >= len(argv) or argv[i] in COMMANDS:
         return argv, ""
-    return argv[:i], " ".join(argv[i:]).strip()
+    return argv[:i], " ".join(argv[i:]).lstrip("\ufeff").strip()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -234,11 +248,12 @@ def cmd_argue(cfg: config.Config, args: argparse.Namespace) -> int:
         position = " ".join(getattr(args, "position", None) or []).strip()
         if position:
             devil = Devil(client, retriever, top_k=cfg.top_k, max_claims=cfg.max_claims)
-            rebuttal = _with_status(devil, position)
-            if args.json:
+            if args.json:  # stdout carries the JSON and nothing else
+                rebuttal = devil.argue(position)
                 print(json.dumps(rebuttal_to_dict(rebuttal), ensure_ascii=False, indent=2))
             else:
-                ui.render(rebuttal, show_discarded=args.show_discarded)
+                rebuttal = _with_status(devil, position)
+                ui.render(rebuttal, show_discarded=args.show_discarded, conversation=False)
             return 0
         return _conversation(cfg, db, client, retriever, opening=getattr(args, "opening", ""))
 
@@ -266,7 +281,8 @@ class _DenseOnly(Retriever):
 def _typed_lines() -> Iterator[str]:
     while True:
         try:
-            yield ui.console.input("[bold]you › [/bold]").strip()
+            # A line piped in from PowerShell or Notepad may begin with a byte order mark.
+            yield ui.console.input("[bold]you › [/bold]").lstrip("\ufeff").strip()
         except (EOFError, KeyboardInterrupt):
             ui.console.print()
             return
@@ -317,9 +333,7 @@ def _conversation(
                 show_discarded = not show_discarded
                 ui.meta(f"Showing discarded quotes: {'on' if show_discarded else 'off'}")
             elif command == "/export":
-                target = Path(rest.strip() or f"devils-advocate-{date.today().isoformat()}.md")
-                target.write_text(ui.to_markdown(turns), encoding="utf-8")
-                ui.meta(f"Saved {target}")
+                _export(turns, rest)
             else:
                 ui.meta(f"Unknown command {command}. /help lists them.")
             continue
@@ -328,9 +342,26 @@ def _conversation(
         except LLMError as exc:
             ui.error(str(exc))
             continue
+        except KeyboardInterrupt:  # Ctrl+C while the model works cancels this turn only
+            ui.meta("Cancelled. /quit or Ctrl+C at the prompt leaves.")
+            continue
         turns.append(rebuttal)
         ui.render(rebuttal, show_discarded=show_discarded)
     return 0
+
+
+def _export(turns: list[Rebuttal], name: str) -> None:
+    if not turns:
+        ui.meta("Nothing to export yet.")
+        return
+    name = name.strip().strip("\"'")  # a path pasted from Explorer comes in quotes
+    target = Path(name or f"devils-advocate-{date.today().isoformat()}.md").expanduser()
+    try:
+        target.write_text(ui.to_markdown(turns), encoding="utf-8")
+    except OSError as exc:
+        ui.error(f"Could not save {target}: {exc.strerror or exc}")
+        return
+    ui.meta(f"Saved {target.resolve()}")
 
 
 def _with_status(devil: Devil, position: str) -> Rebuttal:
@@ -420,7 +451,16 @@ def cmd_eval(cfg: config.Config, args: argparse.Namespace) -> int:
     if not cfg.db_path.exists():
         ui.error("No index yet. Run `devil index` first.")
         return 1
-    cases = evaluation.load_cases(args.cases)
+    if not args.cases.exists():
+        ui.error(
+            f"No cases at {args.cases}. Run this in a clone of the repository or pass --cases."
+        )
+        return 1
+    try:
+        cases = evaluation.load_cases(args.cases)
+    except ValueError as exc:
+        ui.error(str(exc))
+        return 1
     with store.Store(cfg.db_path) as db:
         client = LLMClient(cfg)
         retriever = open_retriever(cfg, db, client, args.retriever)

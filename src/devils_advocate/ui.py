@@ -8,6 +8,7 @@ from rich.text import Text
 from rich.theme import Theme
 
 from .devil import Rebuttal
+from .store import StoredPassage
 from .verify import Status
 
 THEME = Theme(
@@ -24,6 +25,7 @@ THEME = Theme(
 )
 
 console = Console(theme=THEME, highlight=False)
+errors = Console(theme=THEME, highlight=False, stderr=True)
 
 NO_COUNTER = {
     "de": "Keine BGE-Passage gefunden, die dieser Behauptung widerspricht.",
@@ -39,13 +41,14 @@ NO_CLAIMS = {
 }
 
 
-def render(rebuttal: Rebuttal, *, show_discarded: bool = False) -> None:
+def render(rebuttal: Rebuttal, *, show_discarded: bool = False, conversation: bool = True) -> None:
     language = rebuttal.language if rebuttal.language in NO_COUNTER else "en"
     if not rebuttal.claims:
         console.print(Text(NO_CLAIMS[language], style="abstain"))
         return
     for number, claim in enumerate(rebuttal.claims, 1):
-        parts: list[Text] = []
+        # The claim heads the panel's body, not its title: a title is cut to one line.
+        parts: list[Text] = [Text(f"{number}. {claim.claim}", style="claim"), Text()]
         if claim.abstained:
             parts.append(Text(NO_COUNTER[language], style="abstain"))
         for counter in claim.counters:
@@ -69,33 +72,33 @@ def render(rebuttal: Rebuttal, *, show_discarded: bool = False) -> None:
                 line = Text(f"  ✗ {item.label}, {item.reason}: ", style="meta")
                 line.append(item.quote[:160], style="meta")
                 parts.append(line)
-        title = Text(f"{number}. ", style="claim")
-        title.append(claim.claim, style="claim")
-        console.print(Panel(Group(*parts), title=title, title_align="left", border_style="meta"))
+        while parts and not parts[-1].plain:
+            parts.pop()
+        console.print(Panel(Group(*parts), border_style="meta"))
     dropped = rebuttal.proposed - rebuttal.verified
     summary = f"{rebuttal.verified} verified quote(s)"
     if dropped:
-        summary += f", {dropped} discarded because the cited passage does not contain them"
-    summary += f" · {rebuttal.seconds:.0f}s · /sources for full passages"
+        summary += f", {dropped} discarded on verification"
+        summary += " (/discarded shows them)" if conversation and not show_discarded else ""
+    summary += f" · {rebuttal.seconds:.0f}s"
+    if conversation and rebuttal.verified:
+        summary += " · /sources for full passages"
     console.print(Text(summary, style="meta"))
 
 
 def render_sources(rebuttal: Rebuttal) -> None:
-    seen: set[int] = set()
+    """Each passage quoted in `rebuttal` in full, with the quoted parts in bold."""
+    quoted: dict[int, tuple[StoredPassage, list[tuple[int, int]]]] = {}
     for claim in rebuttal.claims:
         for counter in claim.counters:
-            passage = counter.passage
-            if passage.id in seen:
-                continue
-            seen.add(passage.id)
-            body = Text(passage.text)
-            start = passage.text.find(counter.quote)
-            if start >= 0:
-                body.stylize("bold", start, start + len(counter.quote))
-            console.print(
-                Panel(body, title=Text(passage.citation, style="cite"), title_align="left")
-            )
-    if not seen:
+            _, spans = quoted.setdefault(counter.passage.id, (counter.passage, []))
+            spans.extend(counter.spans)
+    for passage, spans in quoted.values():
+        body = Text(passage.text)
+        for start, end in spans:
+            body.stylize("bold", start, end)
+        console.print(Panel(body, title=Text(passage.citation, style="cite"), title_align="left"))
+    if not quoted:
         console.print(Text("No sources in the last answer.", style="meta"))
 
 
@@ -110,10 +113,11 @@ def to_markdown(turns: list[Rebuttal]) -> str:
             if claim.abstained:
                 lines += [f"_{NO_COUNTER[language]}_", ""]
             for counter in claim.counters:
+                quote = counter.quote.replace("\n", "\n>\n> ")  # keep paragraphs in the quote
                 lines += [
                     counter.argument,
                     "",
-                    f"> {counter.quote}",
+                    f"> {quote}",
                     ">",
                     f"> — {counter.citation}",
                     "",
@@ -122,7 +126,7 @@ def to_markdown(turns: list[Rebuttal]) -> str:
 
 
 def error(message: str) -> None:
-    console.print(Text(message, style="error"))
+    errors.print(Text(message, style="error"))
 
 
 def meta(message: str) -> None:

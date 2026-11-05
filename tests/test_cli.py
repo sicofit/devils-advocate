@@ -25,7 +25,9 @@ def respond(messages: list[dict], name: str) -> dict:
             "language": "de",
             "claims": [{"claim": messages[-1]["content"], "queries": ["Verfehlungen"]}],
         }
-    label = next(k for k, text in passages_in(messages).items() if HOLDING in text)
+    label = next((k for k, text in passages_in(messages).items() if HOLDING in text), None)
+    if label is None:
+        return {"counterarguments": []}
     return {"counterarguments": [{"passage": label, "quote": HOLDING, "argument": "a"}]}
 
 
@@ -89,8 +91,7 @@ def test_argue_once_as_json(
     position = "Eine fristlose Kündigung ist immer zulässig."
     code = cli.main(["--data-dir", str(data_dir), "argue", "--json", position])
     assert code == 0
-    out = capsys.readouterr().out
-    result = json.loads(out[out.index("{") :])
+    result = json.loads(capsys.readouterr().out)  # stdout holds the JSON and nothing else
     [claim] = result["claims"]
     [counter] = claim["counterarguments"]
     assert counter == {
@@ -153,6 +154,66 @@ def test_devil_with_a_position_answers_it_and_keeps_talking(
     first, second = (messages for name, messages in fake_model.calls if name == "analysis")
     assert "Kündigung immer zulässig." in str(first)
     assert "Und bei Verfehlungen?" in str(second)
+    # The second turn knows what was cited and is not shown that passage again.
+    assert "BGE 150 III 100 E. 2.2 S. 101" in str(second)
+    _, again = (messages for name, messages in fake_model.calls if name == "counterarguments")
+    assert HOLDING not in str(again)
+
+
+def test_export_takes_quoted_paths_and_reports_failures(
+    data_dir: Path,
+    fake_model: FakeModel,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    good = data_dir / "mit Leerzeichen.md"
+    bad = data_dir / "missing" / "dir" / "x.md"
+    type_lines(
+        monkeypatch,
+        "/export",  # nothing to export yet
+        "\ufeffKündigung immer zulässig.",  # piped in with a byte order mark
+        f'/export "{good}"',
+        f"/export {bad}",
+    )
+    assert cli.main(["--data-dir", str(data_dir)]) == 0
+    captured = capsys.readouterr()
+    assert "Nothing to export yet." in captured.out
+    assert good.exists()
+    assert "Could not save" in captured.err
+    analysis = next(messages for name, messages in fake_model.calls if name == "analysis")
+    assert "\ufeff" not in str(analysis)
+
+
+def test_ctrl_c_cancels_the_turn_not_the_conversation(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def interrupted(messages: list[dict], name: str) -> dict:
+        if "abbrechen" in str(messages):
+            raise KeyboardInterrupt
+        return respond(messages, name)
+
+    model = FakeModel(interrupted)
+    monkeypatch.setattr(cli, "LLMClient", lambda cfg: model)
+    type_lines(monkeypatch, "Bitte abbrechen.", "Kündigung immer zulässig.")
+    assert cli.main(["--data-dir", str(data_dir)]) == 0
+    out = capsys.readouterr().out
+    assert "Cancelled." in out
+    assert "BGE 150 III 100 E. 2.2 S. 101" in out
+
+
+def test_one_shot_answer_does_not_mention_conversation_commands(
+    data_dir: Path, fake_model: FakeModel, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--data-dir", str(data_dir), "argue", "Kündigung immer zulässig."]) == 0
+    assert "/sources" not in capsys.readouterr().out
+
+
+def test_eval_without_cases_explains_itself(
+    data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = data_dir / "nope.jsonl"
+    assert cli.main(["--data-dir", str(data_dir), "eval", "--cases", str(missing)]) == 1
+    assert "pass --cases" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -177,7 +238,7 @@ def test_conversation_warns_when_the_model_is_down(
     monkeypatch.delenv("DA_BASE_URL", raising=False)
     type_lines(monkeypatch)  # Ctrl+D right away
     assert cli.main(["--data-dir", str(data_dir)]) == 0
-    assert "No model reachable at http://127.0.0.1:11434" in capsys.readouterr().out
+    assert "No model reachable at http://127.0.0.1:11434" in capsys.readouterr().err
 
 
 def test_dense_retriever_needs_vectors(data_dir: Path, fake_model: FakeModel) -> None:
