@@ -54,6 +54,17 @@ STOPWORDS = frozenset(
 )
 TOKEN = re.compile(r"\w+", re.UNICODE)
 MAX_QUERY_TERMS = 40
+# Statutes with a two-letter abbreviation. Kept in a query when written in capitals
+# ("Art. 97 CO"), so that the English "or" and the "a" of "lit. a" are not.
+ACTS = frozenset("OR BV CC CO CP LP IV UV EO".split())
+# Raised whenever the tables or the cutting of decisions into passages change, so an
+# index built by an earlier version is rebuilt instead of failing on a missing column
+# or serving passages cut the old way.
+SCHEMA_VERSION = "4"
+
+
+class IndexProblem(Exception):
+    """The index cannot be built or used; the message says what to do."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +95,10 @@ def build(
     meta: dict[str, str],
     on_progress: Callable[[int, int], None] | None = None,
 ) -> tuple[int, int]:
-    """Segment `decisions` into a fresh store at `path`. Returns (decisions, passages)."""
+    """Segment `decisions` into a fresh store at `path`. Returns (decisions, passages).
+
+    The index at `path` is replaced only by one that holds at least one decision.
+    """
     tmp = path.with_name(path.name + ".tmp")
     store = Store.create(tmp)
     decision_count = passage_count = 0
@@ -106,13 +120,23 @@ def build(
                 **meta,
                 "decisions": str(decision_count),
                 "passages": str(passage_count),
+                "schema": SCHEMA_VERSION,
                 # Vectors record the build they were embedded from, so stale ones are noticed.
                 "build_id": uuid.uuid4().hex,
             }
         )
     finally:
         store.close()
-    tmp.replace(path)
+    if not decision_count:
+        tmp.unlink(missing_ok=True)
+        raise IndexProblem("No decision in the corpus qualifies; the old index is kept.")
+    try:
+        tmp.replace(path)
+    except PermissionError:  # Windows: another devil session has the index open
+        tmp.unlink(missing_ok=True)
+        raise IndexProblem(
+            "The index is open in another devil session. Close it and run `devil index` again."
+        ) from None
     return decision_count, passage_count
 
 
@@ -124,12 +148,17 @@ def _stored(row: sqlite3.Row) -> StoredPassage:
 
 
 def fts_query(text: str) -> str:
-    """Turn free text into an FTS5 OR query of its content words."""
+    """Turn free text into an FTS5 OR query of its content words.
+
+    Article numbers and two-letter statutes stay in. "ß" becomes "ss", as the
+    court writes it.
+    """
     terms: list[str] = []
-    for token in TOKEN.findall(text.lower()):
+    for written in TOKEN.findall(text):
+        token = written.casefold()
         if token in STOPWORDS or token in terms:
             continue
-        if len(token) < 3 and not (token.isdigit() and len(token) >= 2):
+        if len(token) < 3 and not token.isdigit() and written not in ACTS:
             continue
         terms.append(token)
     return " OR ".join(f'"{term}"' for term in terms[:MAX_QUERY_TERMS])
@@ -191,6 +220,20 @@ class Store:
 
     def meta(self) -> dict[str, str]:
         return {row["key"]: row["value"] for row in self.db.execute("SELECT * FROM meta")}
+
+    def check(self) -> None:
+        """Raise IndexProblem unless this index was built by this version and is not empty."""
+        try:
+            meta = self.meta()
+        except sqlite3.DatabaseError:
+            meta = {}
+        if meta.get("schema") != SCHEMA_VERSION:
+            raise IndexProblem(
+                "The index was built by another version of devils-advocate. "
+                "Run `devil index` again."
+            )
+        if meta.get("passages") in (None, "0"):
+            raise IndexProblem("The index is empty. Run `devil index` again.")
 
     def count(self) -> int:
         return self.db.execute("SELECT COUNT(*) FROM passages").fetchone()[0]

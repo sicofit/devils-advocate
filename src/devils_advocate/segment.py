@@ -23,12 +23,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+DECISION_ID = re.compile(r"^(\d+) ([IVX]+?)([AB]?) (\d+)$")
 PAGE_MARKER = re.compile(r"^((?:BGE|ATF|DTF) \d+ [IVX]+[a-z]? \d+) S\. (\d+)$")
 NUMBER_LINE = re.compile(r"^(?:(\d{1,2})\.|(\d{1,2}(?:\.\d{1,2}){1,4})\.?)$")
 LETTER_START = re.compile(r"^([a-z])\1?\) ")
 # Artifact lines without content ("ab Seite 2") that the scrape sometimes leaves behind.
 NOISE_LINE = re.compile(r"^ab Seite \d+$")
-SECTION_LINE = re.compile(r"^(Regeste|Sachverhalt|Erwägungen|Dispositiv)$")
+# A Regeste with several parts has one heading per part: "Regeste a", "Regeste b".
+REGESTE_LINE = re.compile(r"^Regeste(?: [a-z])?$")
+SECTION_LINE = re.compile(r"^(?:Regeste(?: [a-z])?|Sachverhalt|Erwägungen|Dispositiv)$")
 # Lines ending in a colon right after the "Erwägungen" heading introduce the
 # reasons ("Aus den Erwägungen:", "Extrait des considérants:", "Das Eidg.
 # Versicherungsgericht zieht in Erwägung:"). They are not part of any Erwägung.
@@ -56,6 +59,16 @@ ABBREVIATIONS = (
     "ff.",
     "a.a.O.",
     "i.V.m.",
+    "zit.",
+    "sog.",
+    "Eidg.",
+    "St.",
+    "Hrsg.",
+    "Aufl.",
+    "Bd.",
+    "u.a.",
+    "d.h.",
+    "insb.",
     "cf.",
     "Cf.",
     "consid.",
@@ -70,7 +83,48 @@ ABBREVIATIONS = (
     "cfr.",
     "Cfr.",
     "pag.",
+    "Mio.",
+    "Mrd.",
+    "Dr.",
+    "Prof.",
+    "resp.",
+    "Fr.",
+    "ca.",
+    "inkl.",
+    "gem.",
+    "Bst.",
+    "m.w.H.",
+    "publ.",
+    "vol.",
 )
+# A party's initial ("entre D. SA", "A. klagte") is no sentence end either.
+INITIAL = re.compile(r"(?:^|[\s(])[A-ZÄÖÜ]\.$")
+# The operative part follows: "Dispositiv", "Demnach erkennt das Bundesgericht:",
+# "Par ces motifs, le Tribunal fédéral prononce:". Older decisions also begin a
+# sentence of reasoning with "Par ces motifs" or "Per questi motivi", so those
+# count only alone or with the court as their subject.
+END_LINE = re.compile(
+    r"^(?:Dispositiv$"
+    r"|Demnach (?:erkennt|beschliesst|verfügt) das (?:Eidg\. Versicherungsg|Bundesg)ericht\b"
+    r"|Par ces motifs(?:,?$|,? le Tribunal fédéral\b)"
+    r"|Per questi motivi(?:,?$|,? il Tribunale federale\b))"
+)
+# "vom 31. Dezember 2019": a day of the month is not the end of a sentence.
+MONTHS = (
+    "Januar",
+    "Februar",
+    "März",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
+)
+DAY = re.compile(r"(?<![\w.])\d{1,2}\.$")
 NO_SPACE_BEFORE = tuple(",;.:)]")
 NO_SPACE_AFTER = ("(", "[", "'", "’", "«")
 SENTENCE_END = tuple(".:!?»")
@@ -135,12 +189,27 @@ def ends_with_abbreviation(text: str) -> bool:
             before = text[: -len(abbreviation)][-1:]
             if not before.isalnum():
                 return True
-    return False
+    return bool(INITIAL.search(text))
+
+
+def is_date(before: str, after: str) -> bool:
+    """Whether `before` ends in the day of a date that `after` continues: "vom 31." "Dezember"."""
+    return bool(DAY.search(before)) and after.startswith(MONTHS)
 
 
 def citation_of(decision_id: str) -> str:
-    """'bge_145 III 72' -> 'BGE 145 III 72'."""
-    return "BGE " + decision_id.removeprefix("bge_").strip()
+    """'bge_145 III 72' -> 'BGE 145 III 72'.
+
+    The dataset writes the parts Ia and Ib of the volumes before 1995 as "IA"
+    and "IB" ("bge_120 IA 1"), and the oldest ids with underscores
+    ("bge_1_I_179"). The decision itself says "BGE 120 Ia 1".
+    """
+    reference = " ".join(decision_id.removeprefix("bge_").replace("_", " ").split())
+    found = DECISION_ID.match(reference)
+    if found:
+        volume, part, letter, page = found.groups()
+        reference = f"{volume} {part}{letter.lower()} {page}"
+    return "BGE " + reference
 
 
 def first_page(reference: str) -> int | None:
@@ -169,13 +238,13 @@ def names_another_decision(decision: str, full_text: str) -> bool:
 
 
 def segment(decision: str, full_text: str) -> list[Passage]:
-    """Return the Regeste and the Erwägungen of one decision as passages."""
-    lines = [line.strip() for line in full_text.splitlines()]
+    """Return the Regeste (one passage per part) and the Erwägungen of one decision."""
+    # Headings such as "Regeste a" are written with a no-break space.
+    lines = [line.replace("\xa0", " ").strip() for line in full_text.splitlines()]
     passages: list[Passage] = []
 
-    regeste = _section(lines, "Regeste")
-    if regeste:
-        text, _ = _join([(line, None) for line in regeste])
+    for part in _regeste_parts(lines):
+        text, _ = _join([(line, None) for line in part])
         if text:
             passages.append(Passage(decision, "Regeste", first_page(decision), text))
 
@@ -190,15 +259,19 @@ def segment(decision: str, full_text: str) -> list[Passage]:
     return passages
 
 
-def _section(lines: list[str], name: str) -> list[str]:
-    try:
-        start = lines.index(name) + 1
-    except ValueError:
-        return []
-    end = start
-    while end < len(lines) and not SECTION_LINE.match(lines[end]):
-        end += 1
-    return [line for line in lines[start:end] if not PAGE_MARKER.match(line)]
+def _regeste_parts(lines: list[str]) -> list[list[str]]:
+    """The lines under each Regeste heading, up to the next heading of any section."""
+    parts: list[list[str]] = []
+    for start, line in enumerate(lines):
+        if line == "Erwägungen":
+            break
+        if not REGESTE_LINE.match(line):
+            continue
+        end = start + 1
+        while end < len(lines) and not SECTION_LINE.match(lines[end]):
+            end += 1
+        parts.append([text for text in lines[start + 1 : end] if not PAGE_MARKER.match(text)])
+    return parts
 
 
 def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Passage]:
@@ -219,6 +292,8 @@ def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Pass
                 Passage(decision, pinpoint, _page_at(pages, start), text[start:end], breaks)
             )
 
+    # An Erwägung divided into 5.1, 5.2 has no a)/b) subdivisions: its "a)" is a list item.
+    decimal = _decimal_headings(lines)
     seen_content = False
     for line in lines:
         if not line or NOISE_LINE.match(line):
@@ -226,7 +301,7 @@ def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Pass
         if PAGE_MARKER.match(line):
             page = _page_of(decision, line) or page
             continue
-        if line == "Dispositiv":  # the operative part follows; it is not reasoning
+        if END_LINE.match(line):  # the operative part follows; it is not reasoning
             break
         if not seen_content and number is None and INTRO_LINE.match(line):
             continue
@@ -241,7 +316,7 @@ def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Pass
                 continue
 
         lettered = LETTER_START.match(line)
-        if lettered and number is not None and len(number) == 1:
+        if lettered and number is not None and len(number) == 1 and number[0] not in decimal:
             label = lettered.group(0)[:-2]
             new_letters = _next_letters(letters, label)
             if new_letters is not None:
@@ -253,6 +328,28 @@ def _erwaegungen(decision: str, lines: list[str], page: int | None) -> list[Pass
         buffer.append((line, page))
     flush()
     return passages
+
+
+def _decimal_headings(lines: list[str]) -> set[int]:
+    """The main Erwägungen that have a heading with two or more levels, such as "5.1".
+
+    Decided per Erwägung: one stray number line ("3.1") in an older decision
+    divided into a) and b) does not take the letters from its other Erwägungen.
+    """
+    number: tuple[int, ...] | None = None
+    divided: set[int] = set()
+    for line in lines:
+        if END_LINE.match(line):
+            break
+        found = NUMBER_LINE.match(line)
+        if not found:
+            continue
+        candidate = tuple(int(part) for part in (found.group(1) or found.group(2)).split("."))
+        if _follows(number, candidate):
+            if len(candidate) >= 2:
+                divided.add(candidate[0])
+            number = candidate
+    return divided
 
 
 def _follows(current: tuple[int, ...] | None, candidate: tuple[int, ...]) -> bool:
@@ -320,6 +417,7 @@ def _join(items: list[tuple[str, int | None]]) -> tuple[str, list[tuple[int, int
         elif (
             out.endswith(SENTENCE_END)
             and not ends_with_abbreviation(out)
+            and not is_date(out, line)
             and line[:1].isupper()
             and not _is_link(line)
             and not _is_link(previous)
@@ -367,11 +465,11 @@ def _chunk(text: str, limit: int = MAX_PASSAGE_CHARS) -> list[tuple[int, int]]:
 def _sentence_ends(text: str, position: int) -> bool:
     """Whether the break before `position` ends a sentence.
 
-    Not after an abbreviation ("i.V.m. Art. 40") and not inside parentheses
-    ("(cf. Message ...)").
+    Not after an abbreviation ("i.V.m. Art. 40", "das zit. Urteil"), not inside
+    a date ("vom 31. Dezember 2019") and not inside parentheses ("(cf. Message ...)").
     """
     before = text[text.rfind("\n", 0, position) + 1 : position]  # the paragraph so far
-    if ends_with_abbreviation(before):
+    if ends_with_abbreviation(before) or is_date(before, text[position:].lstrip()):
         return False
     return before.count("(") <= before.count(")")
 

@@ -12,15 +12,16 @@ Two levels are scored:
 * decision: is the cited BGE among the first k distinct decisions retrieved?
 * pinpoint: is a passage from the cited Erwägung among the first k passages?
 
-The task is harder than what the devil does in a conversation (one query
-instead of a claim plus German and French reformulations) and noisier (the court
-often cites a decision for a side point), so absolute numbers understate the
+The task differs from what the devil does in a conversation (one query instead
+of a claim plus German and French reformulations; the court often cites a
+decision for a side point), so the absolute numbers are not a measure of the
 pipeline. They are for comparing retrievers and catching regressions.
 
-A mode with the suffix "+translate" ("bm25+translate") also searches with a
-German and a French translation of each query, written by the chat model, and
-fuses the rankings. That isolates what the bilingual queries of the analysis
-step contribute.
+A mode with the suffix "+translate" ("bm25+translate") also searches with the
+model's German and French versions of each query and fuses the rankings. A
+version that equals the query (its own language) or the other version is
+searched once. That isolates what the bilingual queries of the analysis step
+contribute.
 """
 
 from __future__ import annotations
@@ -34,13 +35,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from . import prompts
-from .client import ChatModel, LLMError
+from .client import ChatModel, LLMError, ModelUnavailable
 from .search import Retriever
-from .segment import ends_with_abbreviation
+from .segment import ends_with_abbreviation, is_date
 from .store import Store
 
 CITATION = re.compile(
-    r"\b(?:BGE|ATF|DTF)\s+(\d{2,3})\s+([IVX]+[a-z]?)\s+(\d{1,4})"
+    r"\b(?:BGE|ATF|DTF)\s+(\d{1,3})\s+([IVX]+[a-z]?)\s+(\d{1,4})"
     r"(?:\s+(?:E\.|Erw\.|consid\.|c\.)\s*(\d{1,2}(?:\.\d{1,2})*(?:[a-z]{1,2})?(?:/[a-z]{1,3})?))?"
     r"(?:\s+(?:S\.|p\.|pag\.)\s*\d+(?:\s*(?:f\.|ff\.|s\.|ss\.|seg\.|segg\.))?)?"
 )
@@ -91,7 +92,8 @@ def _ends_sentence(text: str, start: int, i: int) -> bool:
     following = text[i + 1 : i + 3]
     if not following.startswith((" ", "\n")) or not following[1:2].isupper():
         return False
-    return not ends_with_abbreviation(text[start : i + 1])
+    before = text[start : i + 1]
+    return not ends_with_abbreviation(before) and not is_date(before, text[i + 1 :].lstrip())
 
 
 def strip_citations(sentence: str) -> str:
@@ -179,20 +181,32 @@ def translate(
     queries: Sequence[Query],
     cache: Path,
     on_progress: Callable[[int, int], None] | None = None,
+    *,
+    model_name: str = "",
 ) -> dict[str, list[str]]:
     """German and French versions of every query, cached in `cache` by query text.
 
-    The cache is saved every `SAVE_EVERY` new translations, so an interrupted
-    run loses little.
+    The cache records the model that made it; translations by another model (or by
+    an unknown one, in a cache from an earlier version) are made again. Only a reply
+    with both languages is cached: a failed or partial one is asked again next run.
+    The cache is saved every `SAVE_EVERY` new translations, so an interrupted run
+    loses little.
     """
+    stored = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
     known: dict[str, list[str]] = (
-        json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else {}
+        stored.get("items", {})
+        if isinstance(stored, dict) and stored.get("model") == model_name
+        else {}
     )
 
     def save() -> None:
         cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(json.dumps(known, ensure_ascii=False, indent=1), encoding="utf-8")
+        cache.write_text(
+            json.dumps({"model": model_name, "items": known}, ensure_ascii=False, indent=1),
+            encoding="utf-8",
+        )
 
+    partial: dict[str, list[str]] = {}
     new = 0
     try:
         for i, query in enumerate(queries, 1):
@@ -206,17 +220,19 @@ def translate(
                         prompts.TRANSLATE_SCHEMA,
                         name="translation",
                     )
+                except ModelUnavailable:
+                    raise  # every further query would fail the same way
                 except LLMError:
                     reply = None  # not cached: the next run asks again
                 if reply is not None:
-                    known[query.text] = [
-                        str(reply.get(lang, "")).strip() for lang in ("de", "fr") if reply.get(lang)
-                    ]
+                    found = [str(reply.get(lang) or "").strip() for lang in ("de", "fr")]
+                    found = [text for text in found if text]
+                    (known if len(found) == 2 else partial)[query.text] = found
             if on_progress:
                 on_progress(i, len(queries))
     finally:
         save()
-    return {q.id: known.get(q.text, []) for q in queries}
+    return {q.id: known.get(q.text, partial.get(q.text, [])) for q in queries}
 
 
 Ranks = tuple[int | None, int | None, bool]  # decision rank, pinpoint rank, pinpoint known
@@ -241,7 +257,7 @@ def run(
         for i, query in enumerate(queries, 1):
             texts = [query.text]
             if extra:
-                texts += [t for t in translations.get(query.id, []) if t != query.text]
+                texts = list(dict.fromkeys(texts + translations.get(query.id, [])))
             hits = retriever.search(
                 texts, DEPTH, mode=base, exclude=frozenset({query.source}), depth=DEPTH
             )

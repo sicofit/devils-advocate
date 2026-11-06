@@ -5,13 +5,31 @@ build-backend = "hatchling.build"
 [project]
 name = "devils-advocate"
 version = "0.1.0"
-description = "Argues against your legal position with Swiss Federal Supreme Court precedent, and shows a quote only if it is verbatim in the cited Erwägung."
+description = "Argues against your legal position with Swiss Federal Supreme Court precedent, and shows a quote only if it is verbatim in the passage it cites."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "sicofit" }]
 keywords = ["legal", "rag", "llm", "swiss-law", "case-law", "evaluation"]
 dependencies = ["numpy>=1.26", "pyarrow>=15", "rich>=13.7"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Legal Industry",
+    "Natural Language :: German",
+    "Natural Language :: French",
+    "Natural Language :: Italian",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+[project.urls]
+Repository = "https://github.com/sicofit/devils-advocate"
+Issues = "https://github.com/sicofit/devils-advocate/issues"
 
 [project.optional-dependencies]
 # ruff is pinned so that CI checks the same formatting as a local run.

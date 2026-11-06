@@ -18,7 +18,8 @@ class Config:
     data_dir: Path = Path.home() / ".devils-advocate"
     temperature: float = 0.2
     request_timeout: float = 600.0
-    # Embedding calls are short; a hung one is retried rather than waited out.
+    # Embedding calls are short; a hung one is cut off rather than waited out
+    # (`devil embed` tries the batch again, a search does not).
     embed_timeout: float = 60.0
     # Passed through to the endpoint. "none" switches off the thinking phase of
     # reasoning models on Ollama, which cuts a structured call from ~15 s to ~1 s.
@@ -64,11 +65,33 @@ def load(**overrides: object) -> Config:
     for name, value in overrides.items():
         if value is not None:
             values[name] = _coerce(getattr(defaults, name), value, "--" + name.replace("_", "-"))
-    return Config(**values)
+    config = Config(**values)
+    _check(config)
+    return config
+
+
+# The smallest and largest value each number may take, and what it means.
+LIMITS: dict[str, tuple[float, float, str]] = {
+    "temperature": (0.0, 2.0, "between 0 and 2"),
+    "request_timeout": (1.0, 86_400.0, "between 1 and 86400 (seconds)"),
+    "embed_timeout": (1.0, 86_400.0, "between 1 and 86400 (seconds)"),
+    "since": (1875, 2100, "a year between 1875 and 2100"),
+    "top_k": (1, 50, "between 1 and 50"),
+    "max_claims": (1, 10, "between 1 and 10"),
+}
+
+
+def _check(config: Config) -> None:
+    for name, (low, high, meaning) in LIMITS.items():
+        value = getattr(config, name)
+        if not low <= value <= high:
+            raise SystemExit(f"{ENV_PREFIX}{name.upper()} must be {meaning}, not {value!r}")
 
 
 def _coerce(default: object, value: object, source: str) -> object:
     if isinstance(default, Path):
+        if not str(value).strip():
+            raise SystemExit(f"{source} must name a directory, not an empty string")
         return Path(str(value)).expanduser()
     if isinstance(default, bool):
         return str(value).lower() in {"1", "true", "yes", "on"}

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from devils_advocate import evaluation
+from devils_advocate.client import LLMError, ModelUnavailable
 from devils_advocate.devil import Devil
 from devils_advocate.search import Retriever
 
@@ -84,19 +85,55 @@ def test_run_scores_and_summarises(tmp_path: Path, retriever: Retriever) -> None
     assert summary["contradicting_positions"] == 1 and summary["out_of_scope"] == 1
     assert summary["found_expected"] == summary["answered"] == 1
     assert summary["abstained_out_of_scope"] == 1
+    assert summary["out_of_scope_with_claims"] == 0
     assert summary["quotes_proposed"] == summary["quotes_verified"] == summary["quotes_exact"] == 1
     assert "1/1" in evaluation.table(report)
 
 
+def test_an_unusable_reply_is_neither_an_answer_nor_an_abstention(
+    tmp_path: Path, retriever: Retriever
+) -> None:
+    cases = evaluation.load_cases(write_cases(tmp_path / "cases.jsonl"))
+
+    def broken_analysis(messages: list[dict], name: str) -> dict:
+        raise LLMError("did not return valid JSON")
+
+    def broken_counter(messages: list[dict], name: str) -> dict:
+        if name == "analysis":
+            return {"language": "de", "claims": [{"claim": "Etwas.", "queries": ["Kündigung"]}]}
+        raise LLMError("cut off")
+
+    for respond_with in (broken_analysis, broken_counter):
+        report = evaluation.run(cases, lambda r=respond_with: Devil(FakeModel(r), retriever))
+        summary = report["summary"]
+        assert summary["answered"] == summary["found_expected"] == 0
+        assert summary["abstained_out_of_scope"] == 0
+        assert summary["errors"] + summary["claim_errors"] == 2
+        assert "unusable model replies" in evaluation.table(report)
+
+    def gone(messages: list[dict], name: str) -> dict:
+        raise ModelUnavailable("No model server answers")
+
+    with pytest.raises(ModelUnavailable):
+        evaluation.run(cases, lambda: Devil(FakeModel(gone), retriever))
+
+
 @pytest.mark.parametrize(
     ("found", "total", "color"),
-    [(18, 22, "brightgreen"), (14, 22, "green"), (5, 22, "yellow"), (0, 0, "yellow")],
+    [
+        (18, 22, "brightgreen"),
+        (14, 22, "green"),
+        (9, 22, "yellow"),
+        (5, 22, "orange"),
+        (1, 22, "red"),
+        (0, 0, "lightgrey"),
+    ],
 )
 def test_badge(found: int, total: int, color: str) -> None:
     report = {"summary": {"found_expected": found, "contradicting_positions": total}}
     assert evaluation.badge(report) == {
         "schemaVersion": 1,
-        "label": "eval: counter-precedent found",
+        "label": "eval: known precedent quoted",
         "message": f"{found}/{total}",
         "color": color,
     }

@@ -113,6 +113,9 @@ class FakeModel:
     def health(self) -> bool:
         return True
 
+    def problem(self) -> str | None:
+        return None
+
     def names(self) -> list[str]:
         return [name for name, _ in self.calls]
 

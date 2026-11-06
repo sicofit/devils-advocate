@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from devils_advocate import config
-from devils_advocate.client import LLMClient, LLMError, _strip_fences
+from devils_advocate.client import LLMClient, LLMError, ModelUnavailable, Truncated, _strip_fences
 
 
 @pytest.fixture(autouse=True)
@@ -69,12 +69,15 @@ def test_strip_fences() -> None:
 class Recorder(BaseHTTPRequestHandler):
     requests: list[tuple[str, dict, dict]] = []
     replies: list[dict] = []
+    status = 200  # of every POST reply
+    get_status = 200  # of GET /v1/models
+    models: list[str] | None = None  # what GET /v1/models lists; None: an empty body
 
     def do_POST(self) -> None:  # noqa: N802 - http.server naming
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         Recorder.requests.append((self.path, dict(self.headers), body))
-        reply = json.dumps(Recorder.replies.pop(0)).encode()
-        self.send_response(200)
+        reply = json.dumps(Recorder.replies.pop(0) if Recorder.replies else {}).encode()
+        self.send_response(Recorder.status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(reply)))
         self.end_headers()
@@ -82,9 +85,13 @@ class Recorder(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - http.server naming
         Recorder.requests.append((self.path, dict(self.headers), {}))
-        self.send_response(200)
-        self.send_header("Content-Length", "0")
+        body = b""
+        if Recorder.models is not None:
+            body = json.dumps({"data": [{"id": m} for m in Recorder.models]}).encode()
+        self.send_response(Recorder.get_status)
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, *args: object) -> None:
         pass
@@ -93,6 +100,7 @@ class Recorder(BaseHTTPRequestHandler):
 @pytest.fixture
 def server() -> Iterator[str]:
     Recorder.requests, Recorder.replies = [], []
+    Recorder.status, Recorder.get_status, Recorder.models = 200, 200, None
     httpd = HTTPServer(("127.0.0.1", 0), Recorder)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -140,8 +148,84 @@ def test_unreachable_endpoint_is_an_llm_error() -> None:
         port = closed.server_address[1]
     client = LLMClient(config.load(base_url=f"http://127.0.0.1:{port}"))
     assert not client.health()
-    with pytest.raises(LLMError, match="cannot reach model"):
+    message = f"No model server answers at http://127.0.0.1:{port}. Start Ollama"
+    assert (client.problem() or "").startswith(message)
+    # The operating system's own wording ("[WinError 10061] ...") is not passed on.
+    with pytest.raises(ModelUnavailable, match=f"^{message}") as error:
         client.chat([])
+    assert "Errno" not in str(error.value) and "WinError" not in str(error.value)
+
+
+def test_a_model_the_server_does_not_list_is_named(server: str) -> None:
+    Recorder.models = ["llama3.1:8b", "qwen3.5:latest"]
+    assert "does not list the model 'qwen3.5:9b'" in (
+        LLMClient(config.load(base_url=server)).problem() or ""
+    )
+    assert LLMClient(config.load(base_url=server, model="qwen3.5")).problem() is None
+    Recorder.models = []  # a server that lists nothing may still serve the model
+    assert LLMClient(config.load(base_url=server)).problem() is None
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_a_refused_api_key_is_named_before_the_first_call(server: str, code: int) -> None:
+    Recorder.get_status = code
+    client = LLMClient(config.load(base_url=server))
+    assert client.health()
+    assert client.problem() == (
+        f"The server at {server.removesuffix('/v1')} refused the request (HTTP {code}). "
+        "Check DA_API_KEY."
+    )
+
+
+def test_a_server_without_a_model_list_still_answers(server: str) -> None:
+    Recorder.get_status = 404
+    client = LLMClient(config.load(base_url=server))
+    assert client.health() and client.problem() is None
+
+
+def test_an_unknown_model_ends_the_turn(server: str) -> None:
+    Recorder.status = 404
+    with pytest.raises(ModelUnavailable, match="has no model 'qwen3.5:9b'"):
+        LLMClient(config.load(base_url=server)).chat([])
+
+
+def test_a_server_error_is_an_ordinary_llm_error(server: str) -> None:
+    Recorder.status = 500
+    with pytest.raises(LLMError, match="HTTP 500") as error:
+        LLMClient(config.load(base_url=server)).chat([])
+    assert not isinstance(error.value, ModelUnavailable)
+
+
+def test_a_cut_off_reply_is_not_asked_again(server: str) -> None:
+    reply = {"choices": [{"message": {"content": '{"a": '}, "finish_reason": "length"}]}
+    Recorder.replies = [reply, reply]
+    with pytest.raises(Truncated, match="OLLAMA_CONTEXT_LENGTH"):
+        LLMClient(config.load(base_url=server)).json([], {}, name="t")
+    assert len(Recorder.requests) == 1
+
+
+def test_an_empty_embedding_is_an_llm_error(server: str) -> None:
+    Recorder.replies = [{"data": [{"index": 0, "embedding": []}]}]
+    with pytest.raises(LLMError, match="empty vector"):
+        LLMClient(config.load(base_url=server)).embed(["a"])
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "message"),
+    [
+        ("DA_MAX_CLAIMS", "-1", "DA_MAX_CLAIMS must be between 1 and 10, not -1"),
+        ("DA_TOP_K", "0", "DA_TOP_K must be between 1 and 50, not 0"),
+        ("DA_TEMPERATURE", "5", "DA_TEMPERATURE must be between 0 and 2, not 5.0"),
+        ("DA_REQUEST_TIMEOUT", "0", "DA_REQUEST_TIMEOUT must be between 1 and 86400"),
+        ("DA_SINCE", "20", "DA_SINCE must be a year between 1875 and 2100, not 20"),
+    ],
+)
+def test_a_number_out_of_range_names_the_setting(
+    monkeypatch: pytest.MonkeyPatch, variable: str, value: str, message: str
+) -> None:
+    monkeypatch.setenv(variable, value)
+    with pytest.raises(SystemExit, match=message):
+        config.load()
 
 
 def test_health_check_sends_the_api_key(server: str) -> None:

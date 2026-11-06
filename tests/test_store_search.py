@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from devils_advocate import store
-from devils_advocate.client import LLMError
+from devils_advocate.client import LLMError, ModelNotFound, ModelUnavailable
 from devils_advocate.corpus import Decision
 from devils_advocate.search import Retriever, VectorIndex, build_vectors, prefixes, vectors_path
 
@@ -18,8 +18,16 @@ from fakes import DECISIONS, HashEmbedder
 
 def test_fts_query_keeps_content_words_once() -> None:
     query = store.fts_query("Die fristlose Kündigung der Kündigung nach Art. 337 OR, 12 a")
-    assert query == '"fristlose" OR "kündigung" OR "art" OR "337" OR "12"'
+    assert query == '"fristlose" OR "kündigung" OR "art" OR "337" OR "or" OR "12"'
     assert store.fts_query("und oder le la") == ""
+
+
+def test_fts_query_spells_like_the_court() -> None:
+    # The court writes "ss"; FTS5 does not fold "ß".
+    assert store.fts_query("Verstoß gemäß") == '"verstoss" OR "gemäss"'
+    # Two-letter statutes and single digits are kept, the English "or" is not.
+    assert store.fts_query("art. 8 CC") == '"art" OR "8" OR "cc"'
+    assert store.fts_query("notice or warning") == '"notice" OR "warning"'
 
 
 def test_fts_query_is_capped() -> None:
@@ -39,6 +47,23 @@ def test_build_skips_decisions_without_passages(tmp_path: Path) -> None:
     empty = Decision("BGE 1 I 1", "2001-01-01", "de", "Nichts zu segmentieren.", "")
     decisions, _ = store.build(tmp_path / "x.sqlite", [empty, *DECISIONS], {})
     assert decisions == 3
+
+
+def test_an_empty_build_keeps_the_old_index(db_path: Path) -> None:
+    empty = Decision("BGE 1 I 1", "2001-01-01", "de", "Nichts zu segmentieren.", "")
+    with pytest.raises(store.IndexProblem, match="old index is kept"):
+        store.build(db_path, [empty], {})
+    with store.Store(db_path) as db:
+        assert db.decision_count() == 3
+        db.check()
+    assert not db_path.with_name(db_path.name + ".tmp").exists()
+
+
+def test_an_index_of_another_version_is_refused(db: store.Store) -> None:
+    db.check()
+    db.db.execute("DELETE FROM meta WHERE key = 'schema'")
+    with pytest.raises(store.IndexProblem, match="Run `devil index` again"):
+        db.check()
 
 
 def test_bm25_finds_the_matching_erwaegung(db: store.Store) -> None:
@@ -138,11 +163,66 @@ def test_build_vectors_ignores_a_part_file_from_another_run(
     path.with_name(path.name + ".part").write_bytes(bytes(2 * 64 * 3))  # three rows of zeros
     if leftover is not None:
         leftover["count"] = db.count()
-        path.with_suffix(".json").write_text(json.dumps(leftover), encoding="utf-8")
+        path.with_name(path.name + ".part.json").write_text(json.dumps(leftover), "utf-8")
     build_vectors(db, HashEmbedder(), "hash-test", path, batch=4)
     fresh = build_vectors(db, HashEmbedder(), "hash-test", tmp_path / "fresh.npy", batch=4)
     assert np.array_equal(np.load(path), np.load(fresh))
     assert VectorIndex.load(path).matches(db)
+
+
+def test_an_interrupted_embed_does_not_vouch_for_old_vectors(db_path: Path, tmp_path: Path) -> None:
+    path = tmp_path / "v.npy"
+    with store.Store(db_path) as db:
+        build_vectors(db, HashEmbedder(), "hash-test", path, batch=4)
+    store.build(db_path, DECISIONS, {"revision": "test"})  # same passages, new build
+
+    class Interrupted(HashEmbedder):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            if self.calls == 1:
+                raise KeyboardInterrupt
+            return super().embed(texts)
+
+    with store.Store(db_path) as db:
+        with pytest.raises(KeyboardInterrupt):
+            build_vectors(db, Interrupted(), "hash-test", path, batch=4)
+        assert not VectorIndex.load(path).matches(db)
+        build_vectors(db, HashEmbedder(), "hash-test", path, batch=4)
+        assert VectorIndex.load(path).matches(db)
+
+
+def test_a_failing_embedding_model_can_fall_back_to_bm25(
+    db: store.Store, vectors: VectorIndex
+) -> None:
+    class Broken(HashEmbedder):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            raise LLMError("embedding model not found")
+
+    with pytest.raises(LLMError):
+        Retriever(db, Broken(), vectors).search(["Verfehlungen"], 3)
+    problems: list[str] = []
+    retriever = Retriever(db, Broken(), vectors, on_dense_error=problems.append)
+    hits = retriever.search(["Verfehlungen"], 3)
+    assert hits and all(hit.sources == ("bm25",) for hit in hits)
+    assert problems == ["embedding model not found"] and not retriever.has_dense
+
+
+def test_a_missing_embedding_model_falls_back_but_a_dead_server_does_not(
+    db: store.Store, vectors: VectorIndex
+) -> None:
+    class Missing(HashEmbedder):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            raise ModelNotFound("The server has no model 'e' (HTTP 404)")
+
+    class Down(HashEmbedder):
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            raise ModelUnavailable("No model server answers")
+
+    problems: list[str] = []
+    retriever = Retriever(db, Missing(), vectors, on_dense_error=problems.append)
+    assert retriever.search(["Verfehlungen"], 3)
+    assert problems and not retriever.has_dense
+    with pytest.raises(ModelUnavailable):
+        Retriever(db, Down(), vectors, on_dense_error=problems.append).search(["Verfehlungen"], 3)
 
 
 def test_build_vectors_retries_a_failed_batch(

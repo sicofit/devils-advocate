@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .client import Embedder, LLMError
+from .client import Embedder, LLMError, ModelNotFound, ModelUnavailable
 from .store import Store, StoredPassage
 
 RRF_K = 60
@@ -59,7 +60,10 @@ class VectorIndex:
 
     def matches(self, store: Store) -> bool:
         """Whether these vectors were embedded from the passages now in `store`."""
-        return self.index == store.meta().get("build_id") and len(self.ids) == store.count()
+        return (
+            self.index == store.meta().get("build_id")
+            and len(self.ids) == len(self.matrix) == store.count()
+        )
 
     def search_many(
         self, queries: np.ndarray, k: int, exclude: Sequence[np.ndarray] | None = None
@@ -96,11 +100,14 @@ def build_vectors(
     total = store.count()
     index = store.meta().get("build_id", "")
     partial = path.with_name(path.name + ".part")
+    # The finished vectors keep their own metadata until the new ones replace them,
+    # so a run that is interrupted, or still running, never vouches for old vectors.
+    partial_meta = path.with_name(path.name + ".part.json")
     meta_path = path.with_suffix(".json")
     dims = None
     done = 0
     if partial.exists():
-        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        meta = json.loads(partial_meta.read_text(encoding="utf-8")) if partial_meta.exists() else {}
         same_run = (meta.get("model"), meta.get("count"), meta.get("index")) == (
             model,
             total,
@@ -123,7 +130,7 @@ def build_vectors(
             rows /= np.linalg.norm(rows, axis=1, keepdims=True) + 1e-12
             if dims is None:
                 dims = rows.shape[1]
-                meta_path.write_text(
+                partial_meta.write_text(
                     json.dumps({"model": model, "dims": dims, "count": total, "index": index}),
                     encoding="utf-8",
                 )
@@ -146,8 +153,13 @@ def build_vectors(
     ids = np.asarray(store.ids(), dtype=np.int64)
     if len(ids) != len(matrix):
         raise RuntimeError(f"embedded {len(matrix)} passages but the index has {len(ids)}")
-    np.save(path, matrix)
-    np.save(path.with_suffix(".ids.npy"), ids)
+    # Old metadata first: until the new metadata is in place, no vectors match the index.
+    meta_path.unlink(missing_ok=True)
+    for target, values in ((path, matrix), (path.with_suffix(".ids.npy"), ids)):
+        tmp = target.with_name(target.stem + ".tmp.npy")
+        np.save(tmp, values)
+        os.replace(tmp, target)
+    os.replace(partial_meta, meta_path)
     partial.unlink()
     return path
 
@@ -176,10 +188,15 @@ class Retriever:
         store: Store,
         embedder: Embedder | None = None,
         vectors: VectorIndex | None = None,
+        on_dense_error: Callable[[str], None] | None = None,
     ) -> None:
         self.store = store
         self.embedder = embedder
         self.vectors = vectors
+        # Given, an embedding call that fails (no such model, an unusable reply) is
+        # reported here and dense search is dropped. A server that is down, too
+        # slow or refuses the key is raised, as it is without this.
+        self.on_dense_error = on_dense_error
 
     @property
     def has_dense(self) -> bool:
@@ -223,7 +240,17 @@ class Retriever:
         if mode in ("bm25", "hybrid"):
             rankings += [("bm25", self.bm25(q, depth, exclude)) for q in queries]
         if mode in ("dense", "hybrid") and self.has_dense:
-            rankings += [("dense", ids) for ids in self.dense_many(queries, depth, exclude)]
+            try:
+                rankings += [("dense", ids) for ids in self.dense_many(queries, depth, exclude)]
+            except LLMError as exc:
+                # A server that is down or refuses fails the chat model too; a missing
+                # embedding model fails only the dense half of the search.
+                if self.on_dense_error is None or (
+                    isinstance(exc, ModelUnavailable) and not isinstance(exc, ModelNotFound)
+                ):
+                    raise
+                self.vectors = None
+                self.on_dense_error(str(exc))
 
         scores: dict[int, float] = {}
         sources: dict[int, set[str]] = {}

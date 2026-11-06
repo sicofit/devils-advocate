@@ -91,7 +91,29 @@ def test_long_erwaegung_is_split_at_sentence_breaks() -> None:
 
 def test_reference_helpers() -> None:
     assert citation_of("bge_145 III 72") == "BGE 145 III 72"
+    assert citation_of("bge_120 IA 1") == "BGE 120 Ia 1"
+    assert citation_of("bge_119 IB 254") == "BGE 119 Ib 254"
+    assert citation_of("bge_1_I_179") == "BGE 1 I 179"
+    assert citation_of("bge_145 IV 1") == "BGE 145 IV 1"
     assert first_page("BGE 145 III 72") == 72
+    # The page markers of such a decision say "Ia", so it is not mistaken for another one.
+    assert not names_another_decision(citation_of("bge_120 IA 1"), "BGE 120 Ia 1 S. 2\n")
+
+
+def test_every_part_of_a_regeste_is_a_passage() -> None:
+    nbsp = "\xa0"
+    text = (
+        f"Urteilskopf\nRegeste{nbsp}a\nErster Leitsatz zur Zuständigkeit.\n"
+        f"Regeste{nbsp}b\nZweiter Leitsatz zur Verhältnismässigkeit.\n"
+        "Sachverhalt\nA.\nErwägungen\n3.\nDer Eingriff ist schwer.\n"
+    )
+    passages = segment("BGE 151 I 137", text)
+    assert [(p.pinpoint, p.text) for p in passages] == [
+        ("Regeste", "Erster Leitsatz zur Zuständigkeit."),
+        ("Regeste", "Zweiter Leitsatz zur Verhältnismässigkeit."),
+        ("E. 3", "Der Eingriff ist schwer."),
+    ]
+    assert passages[1].citation == "BGE 151 I 137 (Regeste)"
 
 
 def test_abbreviations_are_whole_words() -> None:
@@ -100,6 +122,33 @@ def test_abbreviations_are_whole_words() -> None:
     assert ends_with_abbreviation("n.")
     assert not ends_with_abbreviation("sa décision.")
     assert not ends_with_abbreviation("BGE.")
+    assert ends_with_abbreviation("entre D.")
+    assert ends_with_abbreviation("Kanton St.")
+    assert not ends_with_abbreviation("Das trifft nicht zu.")
+    assert not ends_with_abbreviation("Das Gericht folgt dem Antrag des Klägers.")
+
+
+def test_an_abbreviation_or_a_date_does_not_end_a_chunk() -> None:
+    sentence = "Das Gericht hat die Frage bisher offengelassen und prüft sie hier. "
+    for inside in (
+        "Denn entgegen dem zit. Urteil 4A_384/2016 gilt die Frist.",
+        "Das Urteil vom 31. Dezember 2019 ist rechtskräftig.",
+        "Der Kanton St. Gallen hat das Eidg. Departement angerufen.",
+        "Das Eidg. Versicherungsgericht hat die Frage offengelassen.",
+        "Das Urteil vom 23. April 1920 ist rechtskräftig.",
+        "Le contrat conclu entre D. SA et la banque est nul.",
+        "Der Schaden beträgt 2 Mio. Franken und Fr. 5'000.- Zins.",
+        "So entschied Prof. Müller in seinem Gutachten.",
+    ):
+        text = sentence * 20 + inside + " " + sentence * 20
+        spans = _chunk(text, limit=len(sentence) * 20 + 30)
+        assert any(inside in text[start:end] for start, end in spans), inside
+
+
+def test_a_day_of_the_month_does_not_end_a_paragraph() -> None:
+    text = "Erwägungen\n2.\nDas Urteil erging am 31.\nDezember 2019 und ist rechtskräftig.\n"
+    [passage] = segment("BGE 140 I 10", text)
+    assert passage.text == "Das Urteil erging am 31. Dezember 2019 und ist rechtskräftig."
 
 
 def test_paragraphs_survive_a_sentence_ending_in_an_abbreviation_letter() -> None:
@@ -191,3 +240,48 @@ def test_chunks_do_not_end_at_an_abbreviation_or_inside_brackets() -> None:
     assert len(pieces) > 1
     assert all(not piece.endswith("E. 2.") for piece in pieces)
     assert all(piece.count("(") == piece.count(")") for piece in pieces)
+
+
+def test_a_numbered_decision_has_no_letter_subdivisions() -> None:
+    # The layout of BGE 144 V 299: decimal headings, and a list "a) ... b) ..." inside one.
+    text = (
+        "Erwägungen\n5.\nZu prüfen ist zweierlei:\na) ob die Frist lief;\n"
+        "b) ob sie gewahrt ist.\n5.1\nDie Frist lief.\n"
+    )
+    passages = by_pinpoint("BGE 144 V 299", text)
+    assert list(passages) == ["E. 5", "E. 5.1"]
+    assert "a) ob die Frist lief;" in passages["E. 5"].text
+
+
+def test_the_operative_part_ends_the_reasoning_in_every_language() -> None:
+    for closing in (
+        "Demnach erkennt das Bundesgericht:",
+        "Demnach erkennt das Eidg. Versicherungsgericht:",
+        "Par ces motifs, le Tribunal fédéral prononce:",
+        "Per questi motivi, il Tribunale federale pronuncia:",
+    ):
+        text = f"Erwägungen\n6.\nDie Beschwerde ist abzuweisen.\n{closing}\n1.\nAbgewiesen.\n"
+        passages = by_pinpoint("BGE 141 III 200", text)
+        assert list(passages) == ["E. 6"], closing
+        assert passages["E. 6"].text == "Die Beschwerde ist abzuweisen."
+
+
+def test_reasoning_that_begins_with_par_ces_motifs_goes_on() -> None:
+    # The layout of BGE 120 Ib 224: the words open a sentence of reasoning.
+    text = (
+        "Erwägungen\n1.\nPer questi motivi la decisione impugnata deve essere confermata.\n"
+        "2.\nIl ricorso è respinto.\nPer questi motivi,\n1.\nRespinto.\n"
+    )
+    passages = by_pinpoint("BGE 120 Ib 224", text)
+    assert list(passages) == ["E. 1", "E. 2"]
+    assert passages["E. 2"].text == "Il ricorso è respinto."
+
+
+def test_a_stray_number_line_keeps_the_letters_of_the_other_erwaegungen() -> None:
+    # The layout of BGE 124 II 146: letters, and one quoted line "3.1" under E. 3.
+    text = (
+        "Erwägungen\n2.\na) Die Frist lief.\nb) Sie ist gewahrt.\n3.\nZitiert wird:\n3.1\n"
+        "Die Norm gilt.\n4.\na) Der Antrag ist zulässig.\n"
+    )
+    passages = by_pinpoint("BGE 124 II 146", text)
+    assert {"E. 2a", "E. 2b", "E. 4a"} <= set(passages)

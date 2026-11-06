@@ -131,14 +131,32 @@ def test_translations_are_cached(db: Store, tmp_path: Path) -> None:
     queries = bench.build_queries(db)
     cache = tmp_path / "translations.json"
     model = FakeModel(lambda m, name: {"de": TRANSLATION, "fr": m[-1]["content"]})
-    first = bench.translate(model, queries, cache)
+    first = bench.translate(model, queries, cache, model_name="m1")
     assert first == {queries[0].id: [TRANSLATION, queries[0].text]}
-    assert json.loads(cache.read_text(encoding="utf-8")) == {queries[0].text: first[queries[0].id]}
+    assert json.loads(cache.read_text(encoding="utf-8")) == {
+        "model": "m1",
+        "items": {queries[0].text: first[queries[0].id]},
+    }
 
     def unreachable(m: list[dict], name: str) -> dict:
         raise AssertionError("should come from the cache")
 
-    assert bench.translate(FakeModel(unreachable), queries, cache) == first
+    assert bench.translate(FakeModel(unreachable), queries, cache, model_name="m1") == first
+
+
+def test_translations_by_another_model_are_made_again(db: Store, tmp_path: Path) -> None:
+    queries = bench.build_queries(db)
+    cache = tmp_path / "translations.json"
+    # A cache from an earlier version: no model recorded.
+    cache.write_text(json.dumps({queries[0].text: ["alt", "ancien"]}), encoding="utf-8")
+    model = FakeModel(lambda m, name: {"de": TRANSLATION, "fr": "fr"})
+    assert bench.translate(model, queries, cache, model_name="m2") == {
+        queries[0].id: [TRANSLATION, "fr"]
+    }
+    assert bench.translate(model, queries, cache, model_name="m3") == {
+        queries[0].id: [TRANSLATION, "fr"]
+    }
+    assert model.names() == ["translation", "translation"]
 
 
 def test_failed_translation_is_empty_and_asked_again(db: Store, tmp_path: Path) -> None:
@@ -148,9 +166,11 @@ def test_failed_translation_is_empty_and_asked_again(db: Store, tmp_path: Path) 
     queries = bench.build_queries(db)
     cache = tmp_path / "t.json"
     assert bench.translate(FakeModel(failing), queries, cache) == {queries[0].id: []}
-    assert json.loads(cache.read_text(encoding="utf-8")) == {}  # nothing cached
-    model = FakeModel(lambda m, name: {"de": TRANSLATION})
+    assert json.loads(cache.read_text(encoding="utf-8"))["items"] == {}  # nothing cached
+    model = FakeModel(lambda m, name: {"de": TRANSLATION, "fr": ""})
+    # A reply with one language is used, but not cached: the next run asks again.
     assert bench.translate(model, queries, cache) == {queries[0].id: [TRANSLATION]}
+    assert json.loads(cache.read_text(encoding="utf-8"))["items"] == {}
 
 
 def test_level_scores() -> None:
@@ -164,3 +184,21 @@ def test_level_scores() -> None:
         "mrr@10": round((1 + 1 / 3) / 4, 3),
     }
     assert bench._level([]) == {"n": 0}
+
+
+def test_a_translation_is_searched_once(
+    db: Store, retriever: Retriever, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    queries = bench.build_queries(db)
+    searched: list[list[str]] = []
+    search = retriever.search
+
+    def recording(texts: list[str], *args: object, **kwargs: object) -> list:
+        searched.append(list(texts))
+        return search(texts, *args, **kwargs)
+
+    monkeypatch.setattr(retriever, "search", recording)
+    # The model returned the query itself for its own language, and the same text twice.
+    translations = {queries[0].id: [queries[0].text, TRANSLATION, TRANSLATION]}
+    bench.run(retriever, queries, ["bm25+translate"], translations=translations)
+    assert searched == [[queries[0].text, TRANSLATION]]

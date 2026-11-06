@@ -53,16 +53,23 @@ def expected_sha256(revision: str) -> str | None:
     return None
 
 
+class DamagedDownload(ValueError):
+    """The downloaded file does not have the published SHA-256."""
+
+
 def download(
     target: Path,
     *,
     revision: str,
+    expected: str | None = None,
     on_progress: Callable[[int, int | None], None] | None = None,
 ) -> Path:
     """Download the BGE Parquet file at commit `revision` to `target`.
 
     A partial download is resumed only for the same revision, so an interrupted
-    download is never completed with the bytes of a newer file.
+    download is never completed with the bytes of a newer file. With
+    `expected`, the file is checked before it replaces `target`: a damaged
+    download is deleted and the file already at `target` is kept.
     """
     url = f"https://huggingface.co/datasets/{DATASET}/resolve/{revision}/{FILE}"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -88,6 +95,11 @@ def download(
         # 416: the range starts at the end of the file, so the last run had got all of it.
         if exc.code != 416 or not done:
             raise
+    if expected and (digest := sha256(partial)) != expected:
+        partial.unlink()
+        raise DamagedDownload(
+            f"The download is damaged: SHA-256 {digest[:12]}, published {expected[:12]}."
+        )
     shutil.move(partial, target)
     return target
 
@@ -102,7 +114,7 @@ def sha256(path: Path) -> str:
 
 
 def read(path: Path, *, since: int = 0) -> Iterator[Decision]:
-    """Yield the decisions in `path` from year `since` on, skipping empty texts."""
+    """Yield the decisions in `path` from year `since` on, skipping texts under 500 characters."""
     import pyarrow.parquet as pq
 
     from .segment import citation_of

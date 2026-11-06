@@ -17,7 +17,25 @@ from .config import Config
 
 
 class LLMError(RuntimeError):
-    """The model endpoint could not be reached, returned an error, or returned unusable output."""
+    """The model endpoint returned an error or unusable output."""
+
+
+class Truncated(LLMError):
+    """The reply was cut off: it reached the token limit or the end of the context window.
+
+    Sending the same request again would cut it off at the same place.
+    """
+
+
+class ModelUnavailable(LLMError):
+    """No usable model behind the endpoint: not running, too slow, unknown model, refused.
+
+    Unlike other errors this one ends the whole turn: the next call would fail the same way.
+    """
+
+
+class ModelNotFound(ModelUnavailable):
+    """The server answers, but has no model of that name (HTTP 404)."""
 
 
 @dataclass(slots=True)
@@ -44,20 +62,30 @@ class LLMClient:
         self.config = config
 
     def health(self) -> bool:
-        request = urllib.request.Request(self.config.endpoint + "/v1/models", headers=self._auth())
+        """Whether the server answers at all."""
         try:
-            with urllib.request.urlopen(request, timeout=5) as resp:
-                return resp.status == 200
-        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
-            return False
+            return self._models() is not None
+        except ModelUnavailable:
+            return True  # it answers, with a refusal
+
+    def problem(self) -> str | None:
+        """Why the chat model cannot be used, or None if nothing is known to be wrong."""
+        try:
+            models = self._models()
+        except ModelUnavailable as exc:
+            return str(exc)
+        if models is None:
+            return self._unreachable()
+        model = self.config.model
+        if models and not {model, model + ":latest"} & set(models):
+            return (
+                f"The server at {self.config.endpoint} does not list the model {model!r}. "
+                f"Pull it (Ollama: `ollama pull {model}`), or set DA_MODEL."
+            )
+        return None
 
     def chat(
-        self,
-        messages: list[dict],
-        *,
-        schema: dict | None = None,
-        name: str = "output",
-        max_tokens: int | None = None,
+        self, messages: list[dict], *, schema: dict | None = None, name: str = "output"
     ) -> ChatResult:
         payload: dict[str, Any] = {
             "model": self.config.model,
@@ -72,8 +100,6 @@ class LLMClient:
             }
         if self.config.reasoning_effort:
             payload["reasoning_effort"] = self.config.reasoning_effort
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
         started = time.perf_counter()
         data = self._post("/v1/chat/completions", payload)
         try:
@@ -96,6 +122,13 @@ class LLMClient:
         error = ""
         for _ in range(attempts):
             result = self.chat(messages, schema=schema, name=name)
+            if result.finish_reason == "length":
+                # Asking again would give the same cut-off reply.
+                raise Truncated(
+                    f"the model's reply for {name!r} was cut off before it was complete: "
+                    "it reached the model's context limit. On Ollama, start the server with "
+                    "OLLAMA_CONTEXT_LENGTH=8192."
+                )
             try:
                 value = json.loads(_strip_fences(result.text))
             except json.JSONDecodeError as exc:
@@ -121,10 +154,50 @@ class LLMClient:
             ) from exc
         if len(vectors) != len(texts):
             raise LLMError(f"asked for {len(texts)} embeddings, got {len(vectors)}")
+        if any(not isinstance(vector, list) or not vector for vector in vectors):
+            raise LLMError(
+                "the embedding endpoint returned an empty vector; "
+                f"is {self.config.embed_model!r} an embedding model?"
+            )
         return vectors
 
     def _auth(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.config.api_key}"} if self.config.api_key else {}
+
+    def _models(self) -> list[str] | None:
+        """The model names the server lists, [] if it lists none, None if it does not answer.
+
+        Raises ModelUnavailable when the server refuses the API key.
+        """
+        request = urllib.request.Request(self.config.endpoint + "/v1/models", headers=self._auth())
+        try:
+            with urllib.request.urlopen(request, timeout=5) as resp:
+                if resp.status != 200:
+                    return []
+                body = resp.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise ModelUnavailable(self._refused(exc.code)) from exc
+            return []  # it answers, but lists no models
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+            return None
+        try:
+            rows = json.loads(body.decode("utf-8")).get("data")
+            return [str(row["id"]) for row in rows if isinstance(row, dict) and "id" in row]
+        except (ValueError, AttributeError, TypeError):
+            return []  # it answers, but not with a list of models
+
+    def _refused(self, code: int) -> str:
+        return (
+            f"The server at {self.config.endpoint} refused the request (HTTP {code}). "
+            "Check DA_API_KEY."
+        )
+
+    def _unreachable(self) -> str:
+        return (
+            f"No model server answers at {self.config.endpoint}. "
+            "Start Ollama (or your server), or set DA_BASE_URL."
+        )
 
     def _post(self, path: str, payload: dict, timeout: float | None = None) -> dict[str, Any]:
         request = urllib.request.Request(
@@ -133,17 +206,37 @@ class LLMClient:
             headers={"Content-Type": "application/json", **self._auth()},
             method="POST",
         )
+        limit = self.config.request_timeout if timeout is None else timeout
+        variable = "DA_REQUEST_TIMEOUT" if timeout is None else "DA_EMBED_TIMEOUT"
         try:
-            limit = timeout or self.config.request_timeout
             with urllib.request.urlopen(request, timeout=limit) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:500]
+            detail = " ".join(exc.read().decode("utf-8", "replace").split())[:300]
+            if exc.code in (401, 403):
+                raise ModelUnavailable(self._refused(exc.code)) from exc
+            if exc.code == 404:
+                model = payload.get("model")
+                raise ModelNotFound(
+                    f"The server at {self.config.endpoint} has no model {model!r} "
+                    f"(HTTP 404: {detail}). Pull it (Ollama: `ollama pull {model}`), "
+                    "or set DA_MODEL / DA_EMBED_MODEL."
+                ) from exc
             raise LLMError(f"model endpoint returned HTTP {exc.code}: {detail}") from exc
-        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
-            raise LLMError(
-                f"cannot reach model at {self.config.endpoint} ({exc}). "
-                "Is the local server running?"
+        except (TimeoutError, urllib.error.URLError) as exc:
+            reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+            if isinstance(reason, TimeoutError):
+                raise ModelUnavailable(
+                    f"The model at {self.config.endpoint} did not answer within {limit:.0f} s. "
+                    f"Try again (a model that is still loading is slow), or raise {variable}."
+                ) from exc
+            # The operating system's wording ("[WinError 10061] ...") is left out: it
+            # says the same thing in the system's language.
+            raise ModelUnavailable(self._unreachable()) from exc
+        except (OSError, ValueError, http.client.HTTPException) as exc:
+            raise ModelUnavailable(
+                f"The connection to the model server at {self.config.endpoint} failed "
+                f"({type(exc).__name__}). Try again."
             ) from exc
         try:
             data = json.loads(body.decode("utf-8"))

@@ -1,49 +1,56 @@
 {
   "summary": {
     "cases": 26,
+    "errors": 0,
+    "claim_errors": 1,
     "contradicting_positions": 22,
     "out_of_scope": 4,
-    "found_expected": 17,
-    "retrieved_expected": 19,
-    "answered": 21,
+    "found_expected": 21,
+    "retrieved_expected": 21,
+    "answered": 22,
     "abstained_out_of_scope": 4,
-    "quotes_proposed": 82,
-    "quotes_verified": 77,
-    "quotes_exact": 64,
+    "out_of_scope_with_claims": 0,
+    "quotes_proposed": 65,
+    "quotes_verified": 59,
+    "quotes_exact": 48,
     "discarded_by_reason": {
-      "not found in the cited passage": 1,
-      "changes a word of the cited passage": 2,
-      "the ellipsis leaves out a negation": 2
+      "changes a word of the cited passage": 3,
+      "the argument names a decision the cited passage does not": 1,
+      "not found in the cited passage": 2
     },
-    "seconds_median": 8.1,
-    "seconds_max": 22.4
+    "skipped_by_reason": {
+      "same decision as an earlier counter": 24,
+      "its argument says the passage supports the claim": 1
+    },
+    "seconds_median": 16.0,
+    "seconds_max": 32.2
   },
   "cases": [
     {
       "id": "schuldbrief-steuer",
-      "position": "Ein Schuldbrief, der eine Steuerforderung sichert, wird dadurch öffentlich-rechtlich. Der Kanton kann deshalb definitive Rechtsöffnung verlangen.",
+      "position": "Eine Schuldbriefforderung, die eine Steuerforderung sichert, wird dadurch öffentlich-rechtlich. In der Betreibung auf Grundpfandverwertung kann der Kanton deshalb für die Schuldbriefforderung definitive Rechtsöffnung verlangen.",
       "expect": [
         "BGE 151 III 402"
       ],
+      "error": null,
       "language": "de",
       "claims": 2,
-      "proposed": 6,
-      "verified": 4,
-      "exact": 4,
-      "discarded": {
-        "not found in the cited passage": 1,
-        "changes a word of the cited passage": 1
+      "proposed": 2,
+      "verified": 2,
+      "exact": 2,
+      "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1
       },
+      "claim_errors": 0,
       "cited": [
         "BGE 151 III 402",
-        "BGE 134 III 71",
-        "BGE 140 III 36",
-        "BGE 140 III 372"
+        "BGE 134 III 71"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 21.8
+      "seconds": 22.6
     },
     {
       "id": "ostern-fristenstillstand",
@@ -51,24 +58,29 @@
       "expect": [
         "BGE 139 V 490"
       ],
+      "error": null,
       "language": "de",
       "claims": 2,
-      "proposed": 6,
-      "verified": 6,
-      "exact": 6,
-      "discarded": {},
+      "proposed": 5,
+      "verified": 4,
+      "exact": 4,
+      "discarded": {
+        "changes a word of the cited passage": 1
+      },
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
         "BGE 139 V 490",
-        "BGE 139 V 490",
-        "BGE 131 V 305",
-        "BGE 139 V 490",
+        "BGE 131 V 314",
         "BGE 139 V 490",
         "BGE 131 V 305"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 19.1
+      "seconds": 17.3
     },
     {
       "id": "loeschung-260-schkg",
@@ -76,71 +88,81 @@
       "expect": [
         "BGE 146 III 441"
       ],
+      "error": null,
       "language": "de",
       "claims": 1,
-      "proposed": 3,
-      "verified": 3,
-      "exact": 3,
+      "proposed": 2,
+      "verified": 2,
+      "exact": 2,
       "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
         "BGE 146 III 441",
-        "BGE 146 III 441",
-        "BGE 150 III 268"
+        "BGE 149 III 362"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 7.8
+      "seconds": 9.0
     },
     {
       "id": "schulbusse-emrk",
-      "position": "Eine Ordnungsbusse im Schulrecht ist eine strafrechtliche Anklage im Sinne von Art. 6 Ziff. 1 EMRK, weshalb alle Garantien des Strafverfahrens gelten.",
+      "position": "Eine Ordnungsbusse im Schulrecht von bis zu Fr. 1'000.-, mit der Erziehungsberechtigte zur Einhaltung ihrer Pflichten angehalten werden, ist eine strafrechtliche Anklage im Sinne von Art. 6 Ziff. 1 EMRK, weshalb die strafrechtlichen Verfahrensgarantien von Art. 6 EMRK gelten.",
       "expect": [
         "BGE 150 I 88"
       ],
-      "language": "de",
-      "claims": 2,
-      "proposed": 6,
-      "verified": 5,
-      "exact": 5,
-      "discarded": {
-        "the ellipsis leaves out a negation": 1
-      },
-      "cited": [
-        "BGE 150 I 88",
-        "BGE 135 I 313",
-        "BGE 140 I 2",
-        "BGE 150 I 88",
-        "BGE 141 III 265"
-      ],
-      "retrieved_expected": true,
-      "found_expected": true,
-      "abstained": false,
-      "seconds": 15.3
-    },
-    {
-      "id": "doping-training",
-      "position": "Art. 22 SpoFöG erfasst nur Doping im Wettkampf. Wer im Training dopt oder Dopingmittel ausserhalb eines Wettkampfs abgibt, bleibt straflos.",
-      "expect": [
-        "BGE 145 IV 329"
-      ],
+      "error": null,
       "language": "de",
       "claims": 2,
       "proposed": 5,
-      "verified": 5,
-      "exact": 4,
-      "discarded": {},
+      "verified": 4,
+      "exact": 0,
+      "discarded": {
+        "the argument names a decision the cited passage does not": 1
+      },
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
-        "BGE 145 IV 329",
-        "BGE 145 IV 329",
-        "BGE 144 IV 240",
+        "BGE 150 I 88",
+        "BGE 131 I 12",
+        "BGE 139 II 404",
+        "BGE 128 I 346"
+      ],
+      "retrieved_expected": true,
+      "found_expected": true,
+      "abstained": false,
+      "seconds": 20.3
+    },
+    {
+      "id": "doping-training",
+      "position": "Art. 22 SpoFöG erfasst nur Doping im Zusammenhang mit Wettkämpfen. Wer Dopingmittel ausserhalb eines Wettkampfs, etwa an Sportler im Training, abgibt, bleibt nach Art. 22 SpoFöG straflos.",
+      "expect": [
+        "BGE 145 IV 329"
+      ],
+      "error": null,
+      "language": "de",
+      "claims": 2,
+      "proposed": 2,
+      "verified": 2,
+      "exact": 2,
+      "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 4
+      },
+      "claim_errors": 0,
+      "cited": [
         "BGE 145 IV 329",
         "BGE 145 IV 329"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 15.6
+      "seconds": 17.3
     },
     {
       "id": "quellenschutz-beschlagnahme",
@@ -148,24 +170,29 @@
       "expect": [
         "BGE 140 IV 108"
       ],
+      "error": null,
       "language": "de",
       "claims": 2,
-      "proposed": 6,
-      "verified": 6,
+      "proposed": 5,
+      "verified": 4,
       "exact": 4,
-      "discarded": {},
+      "discarded": {
+        "not found in the cited passage": 1
+      },
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
         "BGE 151 IV 153",
         "BGE 140 IV 108",
-        "BGE 138 IV 225",
         "BGE 140 IV 108",
-        "BGE 151 IV 153",
-        "BGE 140 IV 108"
+        "BGE 151 IV 153"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 16.7
+      "seconds": 17.6
     },
     {
       "id": "amtliche-verteidigung-tarif",
@@ -173,21 +200,29 @@
       "expect": [
         "BGE 139 IV 261"
       ],
+      "error": null,
       "language": "de",
-      "claims": 1,
-      "proposed": 3,
-      "verified": 3,
-      "exact": 3,
-      "discarded": {},
+      "claims": 2,
+      "proposed": 5,
+      "verified": 4,
+      "exact": 0,
+      "discarded": {
+        "changes a word of the cited passage": 1
+      },
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
-        "BGE 145 IV 90",
+        "BGE 138 IV 205",
+        "BGE 151 IV 316",
         "BGE 139 IV 261",
-        "BGE 139 IV 261"
+        "BGE 132 I 201"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 8.2
+      "seconds": 17.1
     },
     {
       "id": "einbuergerung-verein",
@@ -195,44 +230,49 @@
       "expect": [
         "BGE 138 I 242"
       ],
+      "error": null,
       "language": "de",
       "claims": 1,
       "proposed": 3,
       "verified": 3,
       "exact": 3,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [
-        "BGE 135 I 265",
-        "BGE 138 I 305",
-        "BGE 138 I 305"
+        "BGE 131 I 18",
+        "BGE 139 I 169",
+        "BGE 138 I 242"
       ],
       "retrieved_expected": true,
-      "found_expected": false,
+      "found_expected": true,
       "abstained": false,
-      "seconds": 9.7
+      "seconds": 8.3
     },
     {
       "id": "fraude-electorale",
-      "position": "Celui qui remplit des bulletins de vote pour des tiers commet déjà une fraude électorale au sens de l'art. 282 ch. 1 al. 2 CP, même s'il ne les transmet jamais à l'autorité.",
+      "position": "Celui qui remplit des bulletins de vote pour des tiers commet déjà une fraude électorale au sens de l'art. 282 ch. 1 al. 2 CP, même s'il ne fait rien pour qu'ils soient transmis à l'autorité.",
       "expect": [
         "BGE 138 IV 70"
       ],
+      "error": null,
       "language": "fr",
       "claims": 1,
-      "proposed": 3,
-      "verified": 2,
+      "proposed": 1,
+      "verified": 1,
       "exact": 1,
-      "discarded": {
-        "the ellipsis leaves out a negation": 1
+      "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 2
       },
+      "claim_errors": 0,
       "cited": [
-        "BGE 138 IV 70",
         "BGE 138 IV 70"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 10.9
+      "seconds": 11.5
     },
     {
       "id": "familiers-voisins",
@@ -240,38 +280,47 @@
       "expect": [
         "BGE 140 IV 97"
       ],
+      "error": null,
       "language": "fr",
       "claims": 1,
       "proposed": 1,
       "verified": 1,
       "exact": 1,
       "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 2
+      },
+      "claim_errors": 0,
       "cited": [
         "BGE 140 IV 97"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 5.3
+      "seconds": 10.2
     },
     {
       "id": "urteilsvorschlag-gerichtsferien",
-      "position": "Für die Frist zur Ablehnung eines Urteilsvorschlags der Schlichtungsbehörde gelten die Gerichtsferien nicht, weil im Schlichtungsverfahren kein Fristenstillstand gilt.",
+      "position": "Die Frist zur Ablehnung eines Urteilsvorschlags der Schlichtungsbehörde (Art. 211 Abs. 1 ZPO) steht während der Gerichtsferien nicht still, weil der Ausschluss des Fristenstillstands für das Schlichtungsverfahren (Art. 145 Abs. 2 lit. a ZPO) auch für diese Frist gilt.",
       "expect": [
         "BGE 144 III 404"
       ],
+      "error": null,
       "language": "de",
       "claims": 2,
-      "proposed": 6,
-      "verified": 6,
-      "exact": 6,
+      "proposed": 4,
+      "verified": 4,
+      "exact": 3,
       "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1,
+        "its argument says the passage supports the claim": 1
+      },
+      "claim_errors": 0,
       "cited": [
-        "BGE 152 III 347",
-        "BGE 144 III 404",
-        "BGE 138 IV 186",
         "BGE 144 III 404",
         "BGE 144 III 404",
+        "BGE 139 III 78",
         "BGE 152 III 347"
       ],
       "retrieved_expected": true,
@@ -281,48 +330,54 @@
     },
     {
       "id": "iv-gerichtskosten",
-      "position": "War der Aufwand minimal, darf das kantonale Versicherungsgericht in einer IV-Streitigkeit weniger als 200 Franken Gerichtskosten erheben.",
+      "position": "Allein weil der Verfahrensaufwand minimal war, darf das kantonale Versicherungsgericht in einer IV-Streitigkeit die Gerichtskosten unter dem Mindestbetrag von 200 Franken nach Art. 69 Abs. 1bis Satz 2 IVG festlegen.",
       "expect": [
         "BGE 138 V 122"
       ],
+      "error": null,
       "language": "de",
       "claims": 1,
-      "proposed": 3,
+      "proposed": 2,
       "verified": 2,
       "exact": 2,
-      "discarded": {
-        "changes a word of the cited passage": 1
+      "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1
       },
+      "claim_errors": 0,
       "cited": [
         "BGE 138 V 122",
-        "BGE 137 V 210"
+        "BGE 137 V 57"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 8.6
+      "seconds": 10.8
     },
     {
       "id": "zeitablauf-ermessen",
-      "position": "Ob das Gericht die Strafe wegen langen Zeitablaufs nach Art. 48 lit. e StGB mildert, liegt in seinem freien Ermessen, auch wenn schon zwei Drittel der Verjährungsfrist verstrichen sind.",
+      "position": "Ob das Gericht die Strafe wegen langen Zeitablaufs nach Art. 48 lit. e StGB mildert, liegt in seinem freien Ermessen, auch wenn schon zwei Drittel der Verjährungsfrist verstrichen sind und sich der Täter seither wohl verhalten hat.",
       "expect": [
         "BGE 140 IV 145"
       ],
+      "error": null,
       "language": "de",
       "claims": 1,
       "proposed": 3,
       "verified": 3,
       "exact": 3,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [
         "BGE 140 IV 145",
         "BGE 132 IV 1",
-        "BGE 136 IV 117"
+        "BGE 129 IV 238"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 8.1
+      "seconds": 13.0
     },
     {
       "id": "hinweis-fristenstillstand",
@@ -330,65 +385,80 @@
       "expect": [
         "BGE 139 III 78"
       ],
+      "error": null,
       "language": "de",
-      "claims": 1,
-      "proposed": 3,
-      "verified": 3,
+      "claims": 2,
+      "proposed": 5,
+      "verified": 4,
       "exact": 3,
-      "discarded": {},
+      "discarded": {
+        "not found in the cited passage": 1
+      },
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
         "BGE 152 III 347",
         "BGE 138 III 483",
+        "BGE 139 III 78",
         "BGE 139 III 78"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 6.9
+      "seconds": 16.6
     },
     {
       "id": "beistandschaft-gutachten",
-      "position": "Die Erwachsenenschutzbehörde kann wegen einer psychischen Störung eine umfassende Beistandschaft errichten, ohne ein Sachverständigengutachten einzuholen.",
+      "position": "Die Erwachsenenschutzbehörde kann wegen einer psychischen Störung eine umfassende Beistandschaft errichten, ohne ein Sachverständigengutachten einzuholen, auch wenn keines ihrer Mitglieder über die nötigen Fachkenntnisse verfügt.",
       "expect": [
         "BGE 140 III 97"
       ],
+      "error": null,
       "language": "de",
-      "claims": 1,
-      "proposed": 3,
-      "verified": 3,
-      "exact": 2,
+      "claims": 2,
+      "proposed": 4,
+      "verified": 4,
+      "exact": 3,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [
         "BGE 140 III 97",
-        "BGE 148 III 1",
-        "BGE 143 III 189"
+        "BGE 152 V 8",
+        "BGE 150 II 133",
+        "BGE 145 III 487"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 7.4
+      "seconds": 15.3
     },
     {
       "id": "curatela-perizia",
-      "position": "L'autorità di protezione degli adulti può istituire una curatela generale per un disturbo psichico anche senza una perizia, perché conosce già bene la persona interessata.",
+      "position": "Poiché conosce già bene la persona interessata, l'autorità di protezione degli adulti può istituire una curatela generale per una turba psichica anche senza una perizia e anche se nessuno dei suoi membri dispone delle conoscenze specialistiche necessarie.",
       "expect": [
         "BGE 140 III 97"
       ],
-      "language": "de",
-      "claims": 1,
-      "proposed": 3,
-      "verified": 3,
-      "exact": 2,
+      "error": null,
+      "language": "it",
+      "claims": 2,
+      "proposed": 1,
+      "verified": 1,
+      "exact": 1,
       "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 1,
       "cited": [
-        "BGE 140 III 105",
-        "BGE 148 III 1",
-        "BGE 148 III 1"
+        "BGE 148 I 251"
       ],
       "retrieved_expected": false,
       "found_expected": false,
       "abstained": false,
-      "seconds": 7.6
+      "seconds": 26.8
     },
     {
       "id": "suizid-uvg",
@@ -396,64 +466,74 @@
       "expect": [
         "BGE 140 V 220"
       ],
+      "error": null,
       "language": "de",
-      "claims": 2,
-      "proposed": 6,
-      "verified": 6,
-      "exact": 4,
+      "claims": 1,
+      "proposed": 2,
+      "verified": 2,
+      "exact": 2,
       "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
-        "BGE 140 V 220",
-        "BGE 129 V 95",
-        "BGE 140 V 220",
-        "BGE 140 V 220",
         "BGE 140 V 220",
         "BGE 129 V 95"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 18.6
+      "seconds": 9.2
     },
     {
       "id": "verrechnung-waehrung",
-      "position": "Werden Forderungen in verschiedenen Währungen verrechnet, ist der Wechselkurs am Tag der Verrechnungserklärung massgebend.",
+      "position": "Werden Forderungen in verschiedenen Währungen verrechnet, ist mangels abweichender Parteivereinbarung der Wechselkurs am Tag der Verrechnungserklärung massgebend.",
       "expect": [
         "BGE 149 III 61"
       ],
+      "error": null,
       "language": "de",
       "claims": 1,
-      "proposed": 3,
-      "verified": 3,
+      "proposed": 1,
+      "verified": 1,
       "exact": 1,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [
-        "BGE 130 III 312",
-        "BGE 137 V 282",
-        "BGE 137 V 282"
+        "BGE 149 III 61"
       ],
-      "retrieved_expected": false,
-      "found_expected": false,
+      "retrieved_expected": true,
+      "found_expected": true,
       "abstained": false,
-      "seconds": 6.9
+      "seconds": 5.0
     },
     {
       "id": "up-abtretung",
-      "position": "Die unentgeltliche Rechtspflege darf nicht davon abhängig gemacht werden, dass die gesuchstellende Person einen allfälligen Prozessgewinn an den Staat abtritt.",
+      "position": "Die unentgeltliche Rechtspflege darf nicht davon abhängig gemacht werden, dass die gesuchstellende Person einen allfälligen Prozessgewinn bis zur Höhe der auf sie entfallenden Gerichts- und Anwaltskosten an den Staat abtritt.",
       "expect": [
         "BGE 142 III 131"
       ],
+      "error": null,
       "language": "de",
       "claims": 1,
-      "proposed": 0,
-      "verified": 0,
-      "exact": 0,
+      "proposed": 2,
+      "verified": 2,
+      "exact": 2,
       "discarded": {},
-      "cited": [],
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
+      "cited": [
+        "BGE 142 III 131",
+        "BGE 142 III 138"
+      ],
       "retrieved_expected": true,
-      "found_expected": false,
-      "abstained": true,
-      "seconds": 2.8
+      "found_expected": true,
+      "abstained": false,
+      "seconds": 10.4
     },
     {
       "id": "eviction-clear-case",
@@ -461,77 +541,94 @@
       "expect": [
         "BGE 141 III 262"
       ],
+      "error": null,
       "language": "en",
       "claims": 1,
-      "proposed": 1,
-      "verified": 1,
-      "exact": 0,
+      "proposed": 2,
+      "verified": 2,
+      "exact": 2,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [
-        "BGE 138 III 123"
-      ],
-      "retrieved_expected": false,
-      "found_expected": false,
-      "abstained": false,
-      "seconds": 5.3
-    },
-    {
-      "id": "libre-passage-sequestre",
-      "position": "Une prestation de sortie versée sur un compte de libre passage est exigible dès son versement et peut donc être séquestrée en tout temps.",
-      "expect": [
-        "BGE 148 III 232"
-      ],
-      "language": "fr",
-      "claims": 2,
-      "proposed": 6,
-      "verified": 6,
-      "exact": 4,
-      "discarded": {},
-      "cited": [
-        "BGE 148 III 232",
-        "BGE 148 III 232",
-        "BGE 126 V 258",
-        "BGE 148 III 232",
-        "BGE 132 III 145",
-        "BGE 148 III 232"
+        "BGE 144 III 462",
+        "BGE 141 III 262"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 22.4
+      "seconds": 7.6
+    },
+    {
+      "id": "libre-passage-sequestre",
+      "position": "Une prestation de sortie transférée sur un compte de libre passage est exigible au sens de l'art. 92 al. 1 ch. 10 LP dès ce transfert, sans que l'assuré doive en demander le versement, et peut donc être séquestrée en tout temps.",
+      "expect": [
+        "BGE 148 III 232"
+      ],
+      "error": null,
+      "language": "fr",
+      "claims": 3,
+      "proposed": 5,
+      "verified": 4,
+      "exact": 4,
+      "discarded": {
+        "changes a word of the cited passage": 1
+      },
+      "skipped": {
+        "same decision as an earlier counter": 3
+      },
+      "claim_errors": 0,
+      "cited": [
+        "BGE 148 III 232",
+        "BGE 129 V 440",
+        "BGE 148 III 232",
+        "BGE 126 V 258"
+      ],
+      "retrieved_expected": true,
+      "found_expected": true,
+      "abstained": false,
+      "seconds": 32.2
     },
     {
       "id": "schuldneranweisung-gerichtsstand",
-      "position": "Für eine Schuldneranweisung nach Art. 291 ZGB ist das Gericht am Vollstreckungsort nach Art. 339 ZPO zuständig.",
+      "position": "Im Binnenverhältnis richtet sich die örtliche Zuständigkeit für eine Schuldneranweisung nach Art. 291 ZGB nach dem Gerichtsstand am Vollstreckungsort gemäss Art. 339 ZPO.",
       "expect": [
         "BGE 145 III 255"
       ],
+      "error": null,
       "language": "de",
-      "claims": 1,
+      "claims": 2,
       "proposed": 3,
       "verified": 3,
       "exact": 3,
       "discarded": {},
+      "skipped": {
+        "same decision as an earlier counter": 1
+      },
+      "claim_errors": 0,
       "cited": [
         "BGE 145 III 255",
-        "BGE 145 III 255",
-        "BGE 137 III 193"
+        "BGE 128 III 473",
+        "BGE 138 III 555"
       ],
       "retrieved_expected": true,
       "found_expected": true,
       "abstained": false,
-      "seconds": 11.8
+      "seconds": 18.2
     },
     {
       "id": "no-claim-pizza",
       "position": "Pizza mit Ananas ist die beste Pizza der Welt.",
       "expect": [],
-      "language": "en",
+      "error": null,
+      "language": "de",
       "claims": 0,
       "proposed": 0,
       "verified": 0,
       "exact": 0,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [],
       "retrieved_expected": false,
       "found_expected": false,
@@ -542,60 +639,78 @@
       "id": "no-claim-weather",
       "position": "Il fait beau à Zurich aujourd'hui et je vais me promener au bord du lac.",
       "expect": [],
+      "error": null,
       "language": "fr",
       "claims": 0,
       "proposed": 0,
       "verified": 0,
       "exact": 0,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [],
       "retrieved_expected": false,
       "found_expected": false,
       "abstained": true,
-      "seconds": 0.3
+      "seconds": 0.4
     },
     {
       "id": "foreign-law-second-amendment",
       "position": "The Second Amendment to the US Constitution protects an individual right to keep and bear arms.",
       "expect": [],
+      "error": null,
       "language": "en",
       "claims": 0,
       "proposed": 0,
       "verified": 0,
       "exact": 0,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [],
       "retrieved_expected": false,
       "found_expected": false,
       "abstained": true,
-      "seconds": 0.3
+      "seconds": 0.4
     },
     {
       "id": "no-claim-greeting",
       "position": "Hallo, wie geht es dir?",
       "expect": [],
+      "error": null,
       "language": "de",
       "claims": 0,
       "proposed": 0,
       "verified": 0,
       "exact": 0,
       "discarded": {},
+      "skipped": {},
+      "claim_errors": 0,
       "cited": [],
       "retrieved_expected": false,
       "found_expected": false,
       "abstained": true,
-      "seconds": 0.3
+      "seconds": 0.4
     }
   ],
   "index": {
     "since": "2000",
     "revision": "6336cd66331427f65f7f18379a7f7a0d0105963b",
     "sha256": "fd363e6c59d420922a8dcf87f3fc76ec4944dc503fca7c0db57a76d3a4931179",
-    "built": "2026-11-05",
+    "built": "2026-11-06",
     "decisions": "6817",
-    "passages": "126497",
-    "build_id": "bb9eb4ee4fde44559314c51f4e6c6976"
+    "passages": "127388",
+    "schema": "4",
+    "build_id": "3915146c6e124b33926a2a675dba5f79"
   },
   "model": "qwen3.5:9b",
-  "retriever": "bm25"
+  "retriever": "bm25",
+  "settings": {
+    "version": "0.1.0",
+    "temperature": 0.2,
+    "reasoning_effort": "none",
+    "top_k": 8,
+    "max_claims": 4,
+    "prompts_sha256": "c1d94df90823"
+  }
 }
